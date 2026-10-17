@@ -22,6 +22,9 @@ def policy_state(file: Path) -> tuple[str, str | None]:
         return "implicit-default", None
     raw = file.read_text(encoding="utf-8")
     blocks = POLICY.findall(raw)
+    if not blocks:
+        # Codex agent UI metadata may exist without an invocation policy.
+        return "implicit-default", None
     if len(blocks) != 1:
         return "invalid", "expected exactly one policy: mapping"
     values = FLAG.findall(blocks[0])
