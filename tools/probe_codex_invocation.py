@@ -72,7 +72,7 @@ def main() -> int:
             instruction_name_visible = skill in rendered
             print(f"{skill}: name visible={instruction_name_visible}, body visible={present}")
             if skill == "plain-probe" and not instruction_name_visible:
-                print("CONTROL DIAGNOSTIC (last 1200 chars):", rendered[-1200:])
+                print("CONTROL DIAGNOSTIC (first 4000 chars):", rendered[:4000])
         print("Probe conclusion:", json.dumps(results, sort_keys=True))
         if not results["plain-probe"]:
             print("INCONCLUSIVE: plain skill is not discoverable; cannot test policy behavior")
