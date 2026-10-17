@@ -37,3 +37,10 @@ def test_referenced_explicit_child_is_reported_without_editing():
         assert report["skill_count"] == 2
         assert report["referenced_explicit_only"] == ["child"]
         assert report["runtime_verified"] is False
+
+
+def test_agent_ui_metadata_without_policy_is_valid_default():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "openai.yaml"
+        path.write_text('interface:\n  display_name: "Research skill"\n')
+        assert policy_state(path) == ("implicit-default", None)
