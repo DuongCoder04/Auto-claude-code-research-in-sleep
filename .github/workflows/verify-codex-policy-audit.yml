@@ -1,0 +1,22 @@
+name: Verify Codex policy audit
+
+on:
+  push:
+    branches:
+      - fix/433-codex-invocation-audit
+
+permissions:
+  contents: read
+
+jobs:
+  policy-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_audit_codex_invocation.py
+      - run: python tools/audit_codex_invocation.py --root skills/skills-codex > codex-policy-report.json
+      - run: python tools/check_skills_inventory.py
