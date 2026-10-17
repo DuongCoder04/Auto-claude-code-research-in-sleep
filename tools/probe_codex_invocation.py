@@ -37,6 +37,8 @@ def main() -> int:
         skills = project / ".agents" / "skills"
         home.mkdir()
         skills.mkdir(parents=True)
+        # Codex project-scoped skill discovery requires a project trust context.
+        subprocess.run(["git", "init", "-q"], cwd=project, check=True)
         for name in ("plain-probe", "policy-probe"):
             skill_dir = skills / name
             skill_dir.mkdir()
@@ -67,7 +69,10 @@ def main() -> int:
             marker = skill.upper().replace("-", "_") + "_BODY_MARKER"
             present = marker in rendered
             results[skill] = present
-            print(f"{skill}: explicitly selected body present={present}")
+            instruction_name_visible = skill in rendered
+            print(f"{skill}: name visible={instruction_name_visible}, body visible={present}")
+            if skill == "plain-probe" and not instruction_name_visible:
+                print("CONTROL DIAGNOSTIC (last 1200 chars):", rendered[-1200:])
         print("Probe conclusion:", json.dumps(results, sort_keys=True))
         if not results["plain-probe"]:
             print("INCONCLUSIVE: plain skill is not discoverable; cannot test policy behavior")
