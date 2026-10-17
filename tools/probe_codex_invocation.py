@@ -71,7 +71,7 @@ def main() -> int:
             results[skill] = present
             instruction_name_visible = skill in rendered
             print(f"{skill}: name visible={instruction_name_visible}, body visible={present}")
-            if skill == "plain-probe" and not instruction_name_visible:
+            if skill == "plain-probe":
                 print("CONTROL DIAGNOSTIC (first 4000 chars):", rendered[:4000])
         print("Probe conclusion:", json.dumps(results, sort_keys=True))
         if not results["plain-probe"]:
