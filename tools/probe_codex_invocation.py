@@ -54,7 +54,7 @@ def main() -> int:
                 (metadata / "openai.yaml").write_text(
                     "policy:\n  allow_implicit_invocation: false\n", encoding="utf-8"
                 )
-        results = {}
+        visibility = {}
         for skill in ("plain-probe", "policy-probe"):
             rc, stdout, stderr = run_codex(project, home, f"${skill} confirm discovery")
             if rc:
@@ -65,22 +65,29 @@ def main() -> int:
             except json.JSONDecodeError:
                 print(f"{skill}: debug output not JSON; snippet={stdout[:1000]!r}")
                 return 2
-            rendered = json.dumps(payload)
-            marker = skill.upper().replace("-", "_") + "_BODY_MARKER"
-            present = marker in rendered
-            results[skill] = present
-            instruction_name_visible = skill in rendered
-            print(f"{skill}: name visible={instruction_name_visible}, body visible={present}")
-            if skill == "plain-probe":
-                print("CONTROL DIAGNOSTIC (first 4000 chars):", rendered[:4000])
-        print("Probe conclusion:", json.dumps(results, sort_keys=True))
-        if not results["plain-probe"]:
-            print("INCONCLUSIVE: plain skill is not discoverable; cannot test policy behavior")
+            # Inspect only the actual developer-visible skill catalog. A name in
+            # the user's literal '$skill' prompt is NOT proof of discovery.
+            catalogs = [
+                block.get("text", "")
+                for item in payload if isinstance(item, dict) and item.get("role") == "developer"
+                for block in item.get("content", []) if isinstance(block, dict)
+                if "<skills_instructions>" in block.get("text", "")
+            ]
+            if not catalogs:
+                print(f"{skill}: no <skills_instructions> catalog in Codex debug output")
+                return 2
+            visible = any(f"- {skill}:" in catalog for catalog in catalogs)
+            visibility[skill] = visible
+            print(f"{skill}: included in model-visible catalog={visible}")
+        print("Observed skill metadata filtering:", json.dumps(visibility, sort_keys=True))
+        if not visibility["plain-probe"]:
+            print("INCONCLUSIVE: control skill not discovered")
             return 2
-        if not results["policy-probe"]:
-            print("RESTRICTION REPRODUCED: explicit-only policy suppressed explicit body injection")
+        if visibility["policy-probe"]:
+            print("FAIL: explicit-only policy did not hide skill from implicit catalog")
             return 3
-        print("EXPLICIT INVOCATION WORKS: both skill bodies appeared in real Codex prompt")
+        print("PASS: policy suppresses implicit skill metadata in actual Codex CLI")
+        print("LIMITATION: explicit parent-to-child invocation is not tested by debug prompt-input")
     return 0
 
 
