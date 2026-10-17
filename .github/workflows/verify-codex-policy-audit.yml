@@ -20,3 +20,16 @@ jobs:
       - run: python -m pytest -q tests/test_audit_codex_invocation.py
       - run: python tools/audit_codex_invocation.py --root skills/skills-codex > codex-policy-report.json
       - run: python tools/check_skills_inventory.py
+
+  codex-runtime-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+      - name: Probe real Codex explicit-only skill invocation (no model call)
+        run: python3 tools/probe_codex_invocation.py
