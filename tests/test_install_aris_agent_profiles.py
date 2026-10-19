@@ -86,6 +86,19 @@ class AgentProfilesTest(unittest.TestCase):
         self.assertFalse(self.ownership.exists())
         self.assertTrue(mine.is_file())
 
+    def test_profile_opt_out_preserves_bounded_leaf_ownership(self):
+        self._run("--skills", "auto-review-loop,research-lit")
+        leaf = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        leaf_ownership = self.project / ".aris" / "installed-agents.txt"
+        self.assertTrue(leaf.is_symlink())
+        original_ownership = leaf_ownership.read_text()
+
+        self._run("--no-agent-profiles")
+        self.assertFalse(self.link.is_symlink())
+        self.assertFalse(self.ownership.exists())
+        self.assertTrue(leaf.is_symlink())
+        self.assertEqual(leaf_ownership.read_text(), original_ownership)
+
     def test_dry_run_writes_nothing(self):
         self._run("--skills", "auto-review-loop")
         self._run("--dry-run", "--no-agent-profiles")
