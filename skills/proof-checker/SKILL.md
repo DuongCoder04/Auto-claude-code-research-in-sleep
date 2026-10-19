@@ -2,7 +2,7 @@
 name: proof-checker
 description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (external reviewer backend, ultra reasoning), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
 argument-hint: "[path-to-tex-file or proof-description] [--deep-fix] [--restatement-check]"
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply, Skill(lean-formalize)
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
@@ -22,7 +22,7 @@ Systematically verify a mathematical proof via cross-model adversarial review, f
 ## Constants
 
 - MAX_REVIEW_ROUNDS = 3
-- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier; capability fallback `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh` per `shared-references/reviewer-routing.md`, capability errors only — never below `xhigh`). Manual backend uses a model the user chooses, **but it must be a non-Claude model ARIS can classify** (OpenAI, Google, DeepSeek, Moonshot/Kimi, Qwen) — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
+- REVIEWER_MODEL = `gpt-6-astra` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier; capability fallback `gpt-6-astra`+`xhigh` → `gpt-5.5`+`xhigh` per `shared-references/reviewer-routing.md`, capability errors only — never below `xhigh`). Manual backend uses a model the user chooses, **but it must be a non-Claude model ARIS can classify** (OpenAI, Google, DeepSeek, Moonshot/Kimi, Qwen) — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 
 ## Reviewer Calling Convention
@@ -31,7 +31,7 @@ When calling the reviewer, branch on REVIEWER_BACKEND:
 
 **If REVIEWER_BACKEND = `codex`:**
   Use `mcp__codex__codex` for new review threads
-  (`model: gpt-5.6-sol`, `config: {"model_reasoning_effort": "ultra"}`).
+  (`model: gpt-6-astra`, `config: {"model_reasoning_effort": "ultra"}`).
   Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
 
 **If REVIEWER_BACKEND = `manual`:**
@@ -249,11 +249,23 @@ h_act = Θ(κ^α)  [as κ→0, uniform in π on compact subsets of Π_K, for fix
 ```
 Flag any statement where limit order is ambiguous or uniformity is unclear.
 
+### Optional Lean verification
+
+When the user requests Lean or a specific obligation warrants formal checking,
+delegate that obligation and its original hypotheses to
+[`/lean-formalize`](../lean-formalize/SKILL.md). Record the checked scope, exported
+declaration, statement-alignment evidence, build output and transitive-axiom
+audit, then resume this audit. A proved sublemma closes only the corresponding
+obligation. Keep the complete proof audit, acceptance decision and canonical wiki
+artifacts here; the nested Lean task returns evidence without starting another
+`proof-checker` run. Routine proof checks do not require Lean. Reviewer agreement
+and unsuccessful counterexample searches do not discharge a proof obligation.
+
 ### Phase 1: First Review (reviewer backend, ultra reasoning)
 
 Submit the **complete proof content** with the checklist below, using the selected backend.
 
-For `codex`, call `mcp__codex__codex` and always pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` (deep-audit tier). For `manual`, call `mcp__manual_review__review` with the identity-bearing config from the Reviewer Calling Convention above — `model`, `sandbox` and `cwd` are Codex-only.
+For `codex`, call `mcp__codex__codex` and always pin `model: gpt-6-astra` + `config: {"model_reasoning_effort": "ultra"}` (deep-audit tier). For `manual`, call `mcp__manual_review__review` with the identity-bearing config from the Reviewer Calling Convention above — `model`, `sandbox` and `cwd` are Codex-only.
 
 Use this exact prompt for both backends:
 
@@ -457,7 +469,7 @@ The blind review prompt:
 ```
 [Codex:]
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "ultra"}
   prompt: |
     Blind review of the following proof section. You have NOT seen any prior
@@ -734,7 +746,7 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-6-astra)>",
   "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {

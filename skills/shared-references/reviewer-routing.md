@@ -7,7 +7,7 @@ The default reviewer backend depends on the skill AND the execution environment:
 | Skill | Default backend | Opt-in override |
 |-------|----------------|-----------------|
 | `/auto-review-loop` | **`copilot-native`** when the marker protocol binds the current Copilot CLI root session; otherwise **`codex`** | `--reviewer: codex` / `oracle-pro` / `agy` / `manual`; `--reviewer: copilot` retains the legacy custom-agent drive mode |
-| All other reviewer skills | **Codex MCP** (`mcp__codex__codex`), model **`gpt-5.6-sol`** | `--reviewer: oracle-pro` / `agy` / `manual` |
+| All other reviewer skills | **Codex MCP** (`mcp__codex__codex`), model **`gpt-6-astra`** | `--reviewer: oracle-pro` / `agy` / `manual` |
 
 When no reviewer is specified, `/auto-review-loop` first attempts the
 [native marker protocol](#copilot-cli-native-rubber-duck-default-for-auto-review-loop).
@@ -29,25 +29,25 @@ See the [native Copilot section](#copilot-cli-native-rubber-duck-default-for-aut
 
 ### Codex MCP Tiered Reasoning-Effort Policy
 
-When Codex MCP is the active backend (default for all non-auto-review-loop skills, or explicit `--reviewer: codex`), model **`gpt-5.6-sol`** (GPT-5.6-Sol) is used with a **two-tier reasoning-effort policy** (since 2026-07-10; `ultra`/`max` need codex-cli ≥ 0.144.1):
+When Codex MCP is the active backend (default for all non-auto-review-loop skills, or explicit `--reviewer: codex`), model **`gpt-6-astra`** (GPT-6-Astra) is used with a **two-tier reasoning-effort policy** (since 2026-07-10; `ultra`/`max` need codex-cli ≥ 0.144.1):
 
 | Tier | `model_reasoning_effort` | Which calls |
 |------|--------------------------|-------------|
 | **Deep-audit** | `ultra` | `/proof-checker` · `/kill-argument` (attack / defense / adjudication threads; beast-mode extra axis probes stay `xhigh`) · `/research-review` · `/experiment-audit` · `/paper-claim-audit` · `/result-to-claim` · `/meta-apply` |
 | **Regular** | `xhigh` | every other reviewer call — including ALL rounds of `/auto-review-loop` and other multi-round loops (a `codex-reply` cannot change model/effort mid-thread), and per-item fan-outs like `/citation-audit` (per-entry fresh calls would multiply `ultra`'s delegation cost for no verdict gain) |
 
-**Always pin BOTH `model` and `config.model_reasoning_effort` explicitly in the first call of every thread.** Do not rely on the user's `~/.codex/config.toml`: the catalog default effort for gpt-5.6-sol is `low`, far below the review floor.
+**Always pin BOTH `model` and `config.model_reasoning_effort` explicitly in the first call of every thread.** Do not rely on the user's `~/.codex/config.toml`: the catalog default effort for gpt-6-astra is `low`, far below the review floor.
 
-`ultra` = deepest reasoning + automatic task delegation — right for one-shot verdict-bearing audits, wrong for per-item loops (slower, pricier). Effort enums accepted by codex-cli ≥ 0.144.1: `none / minimal / low / medium / high / xhigh / max / ultra`.
+`ultra` = deepest reasoning + automatic task delegation — right for one-shot verdict-bearing audits, wrong for per-item loops (slower, pricier). Effort enums accepted by codex-cli ≥ 0.144.1: `none / minimal / low / medium / high / xhigh / max / ultra`. `max` and `ultra` both sit above `xhigh`; ARIS uses `ultra` for the deep-audit tier and does not use `max`.
 
 > **Do not confuse the two "max"es.** ARIS's `— effort: lite|balanced|max|beast` ([effort-contract.md](effort-contract.md)) sets how much WORK the pipeline does; Codex's `model_reasoning_effort: …|max|ultra` sets how hard the REVIEWER thinks. `— effort: max` does NOT imply `model_reasoning_effort: max`.
 
 ### Codex capability fallback (new reviewer sessions only)
 
-Resolve the reviewer pair on the **first new Codex session of each tier** in a run, then reuse that resolved pair for later sessions of the same tier. Try the declared pair first (`gpt-5.6-sol` + `ultra` for deep-audit; `gpt-5.6-sol` + `xhigh` for regular). Then:
+Resolve the reviewer pair on the **first new Codex session of each tier** in a run, then reuse that resolved pair for later sessions of the same tier. Try the declared pair first (`gpt-6-astra` + `ultra` for deep-audit; `gpt-6-astra` + `xhigh` for regular). Then:
 
-- Only if the call fails **before returning a usable thread** AND the error **explicitly identifies the requested effort as unsupported** (older codex-cli): retry `gpt-5.6-sol` + `xhigh`. (This step exists only for the deep tier's `ultra` — a regular-tier `xhigh` call skips it; `xhigh` predates 0.144.1.)
-- Only if the error **explicitly identifies `gpt-5.6-sol` as unknown or unavailable** to this account/plan: retry `gpt-5.5` + `xhigh` (skip redundant intermediate steps).
+- Only if the call fails **before returning a usable thread** AND the error **explicitly identifies the requested effort as unsupported** (older codex-cli): retry `gpt-6-astra` + `xhigh`. (This step exists only for the deep tier's `ultra` — a regular-tier `xhigh` call skips it; `xhigh` predates 0.144.1.)
+- Only if the error **explicitly identifies `gpt-6-astra` as unknown or unavailable** to this account/plan: retry `gpt-5.6-sol` + `xhigh`, then `gpt-5.5` + `xhigh` (skip redundant intermediate steps).
 - **NEVER downgrade on** timeout, rate-limit/capacity, authentication, transport/protocol, server, sandbox/tool, context-length, malformed-request, or response-parse errors — a blind downgrade retry there risks double-running (and double-billing) a review that may have gone through.
 - **Never run a verdict-bearing review below `xhigh`.** `gpt-5.4` is available only as an explicit user override for legacy/repro runs — it is NOT part of the automatic chain.
 - Replies (`codex-reply`) inherit the successful session's model and effort — pass only the saved `threadId` plus the message.
@@ -176,7 +176,7 @@ available, its call fails, or cross-family identity cannot be verified, emit
 
 ### After upgrading codex-cli
 
-MCP servers are spawned per session: after upgrading codex-cli (e.g. to 0.144.1 for `ultra`/`max`), **restart the Claude Code session** so `codex mcp-server` runs the new binary — an old server process rejects the new effort enums even though the CLI on disk is new.
+MCP servers are spawned per session: after upgrading codex-cli (e.g. to 0.144.1 for `ultra`/`max`), **restart the Claude Code session** so the `codex` MCP server (`mcp-servers/codex-exec/server.py`, which runs `codex exec`) picks up the new binary — an old server process rejects the new effort enums even though the CLI on disk is new.
 
 ## Optional: GPT-5.5 Pro via Oracle
 
@@ -188,7 +188,7 @@ When the user explicitly passes `— reviewer: oracle-pro`, route the review thr
 Parse $ARGUMENTS for `— reviewer:` directive.
 
 If not specified OR `— reviewer: codex`:
-    → Use mcp__codex__codex with model: gpt-5.6-sol at the tier's effort
+    → Use mcp__codex__codex with model: gpt-6-astra at the tier's effort
       (deep-audit: ultra / regular: xhigh — see the Default table above).
     → This is the DEFAULT. No change from current behavior.
 
@@ -264,6 +264,12 @@ If Oracle is not installed, `— reviewer: oracle-pro` gracefully falls back to 
 ### Upstream development & known issues
 
 Oracle MCP is maintained at [`steipete/oracle`](https://github.com/steipete/oracle). When you invoke `— reviewer: oracle-pro` (and especially the `o3-deep-research` / `gpt-5.5-pro` paths), it's worth checking the **[open PRs](https://github.com/steipete/oracle/pulls)** for in-flight fixes that may affect your run — e.g., model routing changes, browser-mode auth fixes, rate-limit handling, or new model alias support. ARIS does not vendor Oracle MCP; you're running the published version from `npm install -g @steipete/oracle`. If a behavior surprises you, the upstream PR queue is the first place to check before opening an issue here.
+
+## Optional direct Grok / Antigravity consultation
+
+When explicitly requested by the user, separately registered Grok or Antigravity MCP tools can read files and discuss a question: `grok` / `grok-reply` (default `grok-4.7` + `xhigh`) and `antigravity` / `antigravity-reply` (default `gemini-3.8-flash-high` + `high`). Pass `prompt` and an explicit `cwd` on the first call; use that service's saved `threadId` and `prompt` for follow-ups. See [grok-exec](../../mcp-servers/grok-exec/README.md) and [antigravity-exec](../../mcp-servers/antigravity-exec/README.md) for installation and tool contracts.
+
+These are direct consultation tools, not additional `— reviewer:` values. Installing them does not replace a skill's reviewer calls or satisfy its acceptance gate automatically. The existing mainline `— reviewer: agy` route remains `gemini-review`; the Codex base retains `spawn_agent` / `send_input`, and the Gemini overlay retains `review*`. Follow each skill's current reviewer contract for formal reviews.
 
 ## Optional: Gemini via Antigravity CLI (`— reviewer: agy`)
 
@@ -393,7 +399,7 @@ The mainline reviewer contract is `mcp__codex__codex` + `mcp__codex__codex-reply
 
 If Codex MCP is broken in your setup, prefer in order:
 
-1. Fix the MCP registration: `claude mcp add codex -s user -- codex mcp-server`, then `/mcp` in-session to (re)connect.
+1. Fix the MCP registration: `claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"` (codex-cli 0.154 removed `codex mcp-server`; the bridge replaces it — verified on 0.153.4 and 0.154.0, needs `codex exec resume`), then `/mcp` in-session to (re)connect.
 2. Codex-CLI-as-executor: use the native mirror pack [`skills/skills-codex/`](../skills-codex/) — designed to run inside Codex CLI without Claude-side MCP.
 3. One-shot `codex exec` only for skills whose review is a single call with no follow-up reply.
 
@@ -803,7 +809,7 @@ copilot --agent "$REVIEWER_PROFILE" --model "$REVIEWER_MODEL" \
 | Capability | Codex MCP | Copilot `--agent` + profiles | Status |
 |-----------|-----------|--------------------------|--------|
 | Task spawning | `mcp__codex__codex` | `copilot --agent` subprocess (documented Copilot CLI form) | **Verified** — in Copilot CLI docs |
-| Model pinning | `gpt-5.6-sol` param | Profile model repeated as subprocess `--model` | **Verified** — prevents Auto-session inheritance |
+| Model pinning | `gpt-6-astra` param | Profile model repeated as subprocess `--model` | **Verified** — prevents Auto-session inheritance |
 | Cross-model family | Configurable (agy, manual, llm-chat) | Router picks opposite-family profile from declared executor model | **Route verified; executor identity unverified** |
 | Thread continuity | `codex-reply` (threadId) | New `copilot --agent` call + `review-stage/REVIEWER_MEMORY.md` artifact | **Verified** — memory-artifact pattern |
 | Reasoning effort control | `xhigh` / `ultra` tiers | Subprocess `--effort xhigh` | **Verified** — capability-gated before review |
