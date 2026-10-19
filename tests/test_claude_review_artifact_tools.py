@@ -15,6 +15,7 @@ read-only tools, prompt-only blocks stay tool-free. These tests pin both halves.
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -137,6 +138,27 @@ class BridgeDefaultTests(unittest.TestCase):
         cmd = self._cmd(session_id="sess-1", tools=ARTIFACT_REVIEW_TOOLS)
         self.assertIn("--resume", cmd)
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Read,Grep,Glob")
+
+    def test_reviewer_cannot_inherit_executor_mcp_servers(self) -> None:
+        cmd = self._cmd(tools=ARTIFACT_REVIEW_TOOLS)
+        self.assertIn("--strict-mcp-config", cmd)
+        self.assertEqual(json.loads(cmd[cmd.index("--mcp-config") + 1]), {"mcpServers": {}})
+
+    def test_all_review_tools_expose_and_forward_cwd(self) -> None:
+        listing = MODULE.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        tools = {tool["name"]: tool for tool in listing["result"]["tools"]}
+        for name in ("review", "review_reply", "review_start", "review_reply_start"):
+            with self.subTest(tool=name):
+                self.assertEqual(tools[name]["inputSchema"]["properties"]["cwd"]["type"], "string")
+                function = "start_async_review" if name.endswith("start") else "run_claude_review"
+                args = {"prompt": "review", "cwd": "/review/workspace"}
+                if "reply" in name:
+                    args["threadId"] = "existing-session"
+                with mock.patch.object(MODULE, function, return_value=({}, None)) as invoke:
+                    MODULE.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": name, "arguments": args}})
+                self.assertEqual(invoke.call_args.kwargs["cwd"], "/review/workspace")
+                if "reply" in name:
+                    self.assertEqual(invoke.call_args.kwargs["session_id"], "existing-session")
 
 
 class GeneratorDriftTests(unittest.TestCase):
