@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Generate Claude-review overrides for the upstream Codex-native skills."""
+"""Historical overlay parsers; frozen overlays are no longer regenerated."""
 
 from __future__ import annotations
 
 import ast
 import json
 import re
-import shutil
 from pathlib import Path
 
 
@@ -325,33 +324,19 @@ def transform_body(text: str) -> str:
     return append_async_notes(add_artifact_review_tools(text))
 
 
+FROZEN_MESSAGE = (
+    "Partial reviewer overlays are frozen; use skills/skills-codex with reviewer "
+    "selection. See skills/skills-codex/README.md for safe migration."
+)
+
+
 def generate_one(skill_name: str) -> None:
-    skill_path = SRC_ROOT / skill_name / "SKILL.md"
-    content = skill_path.read_text(encoding="utf-8")
-    match = FRONTMATTER_RE.match(content)
-    if not match:
-        raise ValueError(f"Missing frontmatter: {skill_path}")
-
-    frontmatter = match.group(1)
-    body = content[match.end():].lstrip("\n")
-    name = extract_field(frontmatter, "name") or skill_name
-    description = normalize_description(extract_field(frontmatter, "description"))
-
-    output = build_frontmatter(name, description)
-    output += OVERRIDE_NOTE + "\n\n"
-    output += transform_body(body).rstrip() + "\n"
-
-    target_dir = DEST_ROOT / skill_name
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    (target_dir / "SKILL.md").write_text(output, encoding="utf-8")
+    """Refuse regeneration while retaining historical parser helpers for tests."""
+    raise RuntimeError(FROZEN_MESSAGE)
 
 
 def main() -> None:
-    DEST_ROOT.mkdir(parents=True, exist_ok=True)
-    for skill_name in TARGET_SKILLS:
-        generate_one(skill_name)
+    raise SystemExit(FROZEN_MESSAGE)
 
 
 if __name__ == "__main__":

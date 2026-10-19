@@ -15,6 +15,7 @@ read-only tools, prompt-only blocks stay tool-free. These tests pin both halves.
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -37,8 +38,8 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 # Which overlay skills hand the reviewer artifact paths, and how many review
-# calls in each do so. A base-skill edit that adds or removes artifact-grounded
-# review prompts should land here deliberately, not silently.
+# calls in each do so. These protect the frozen snapshot independently of
+# subsequent changes to the complete Codex pack.
 EXPECTED_ARTIFACT_BLOCKS = {
     "auto-review-loop": 2,      # round-1 artifact review + round-2 changed-files reply
     "research-review": 1,       # "Revised files:" follow-up round
@@ -89,9 +90,8 @@ class OverlayOptInTests(unittest.TestCase):
         self.assertEqual(
             counts,
             EXPECTED_ARTIFACT_BLOCKS,
-            "artifact-grounded review blocks changed; regenerate the overlay "
-            "(python tools/generate_codex_claude_review_overrides.py) and update "
-            "EXPECTED_ARTIFACT_BLOCKS if the change is intended",
+            "the frozen overlay artifact-tool contract changed; inspect the "
+            "snapshot change and update EXPECTED_ARTIFACT_BLOCKS if intended",
         )
 
 
@@ -138,33 +138,39 @@ class BridgeDefaultTests(unittest.TestCase):
         self.assertIn("--resume", cmd)
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Read,Grep,Glob")
 
+    def test_reviewer_cannot_inherit_executor_mcp_servers(self) -> None:
+        cmd = self._cmd(tools=ARTIFACT_REVIEW_TOOLS)
+        self.assertIn("--strict-mcp-config", cmd)
+        self.assertEqual(json.loads(cmd[cmd.index("--mcp-config") + 1]), {"mcpServers": {}})
 
-class GeneratorDriftTests(unittest.TestCase):
-    def test_checked_in_overlay_matches_generator_output(self) -> None:
-        """The overlay is generated; hand-edits to SKILL.md would be lost."""
+    def test_all_review_tools_expose_and_forward_cwd(self) -> None:
+        listing = MODULE.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        tools = {tool["name"]: tool for tool in listing["result"]["tools"]}
+        for name in ("review", "review_reply", "review_start", "review_reply_start"):
+            with self.subTest(tool=name):
+                self.assertEqual(tools[name]["inputSchema"]["properties"]["cwd"]["type"], "string")
+                function = "start_async_review" if name.endswith("start") else "run_claude_review"
+                args = {"prompt": "review", "cwd": "/review/workspace"}
+                if "reply" in name:
+                    args["threadId"] = "existing-session"
+                with mock.patch.object(MODULE, function, return_value=({}, None)) as invoke:
+                    MODULE.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": name, "arguments": args}})
+                self.assertEqual(invoke.call_args.kwargs["cwd"], "/review/workspace")
+                if "reply" in name:
+                    self.assertEqual(invoke.call_args.kwargs["session_id"], "existing-session")
+
+
+class FrozenOverlayTests(unittest.TestCase):
+    def test_regeneration_refuses_without_touching_destinations(self) -> None:
+        """New base features must not rewrite legacy linked installations."""
         from tools import generate_codex_claude_review_overrides as gen
 
-        for skill in gen.TARGET_SKILLS:
-            source = (gen.SRC_ROOT / skill / "SKILL.md").read_text(encoding="utf-8")
-            match = gen.FRONTMATTER_RE.match(source)
-            assert match is not None
-            body = source[match.end():].lstrip("\n")
-            name = gen.extract_field(match.group(1), "name") or skill
-            description = gen.normalize_description(
-                gen.extract_field(match.group(1), "description")
-            )
-            expected = gen.build_frontmatter(name, description)
-            expected += gen.OVERRIDE_NOTE + "\n\n"
-            expected += gen.transform_body(body).rstrip() + "\n"
-
-            actual = (gen.DEST_ROOT / skill / "SKILL.md").read_text(encoding="utf-8")
-            with self.subTest(skill=skill):
-                self.assertEqual(
-                    actual,
-                    expected,
-                    f"{skill} overlay is stale; run "
-                    "python tools/generate_codex_claude_review_overrides.py",
-                )
+        with mock.patch.object(gen, "SRC_ROOT", Path("/missing-base")), \
+             mock.patch.object(gen, "DEST_ROOT", Path("/missing-overlay")):
+            with self.assertRaisesRegex(RuntimeError, "overlays are frozen"):
+                gen.generate_one("research-review")
+            with self.assertRaisesRegex(SystemExit, "overlays are frozen"):
+                gen.main()
 
 
 if __name__ == "__main__":
