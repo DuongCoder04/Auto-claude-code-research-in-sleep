@@ -65,8 +65,19 @@ def skill_names(root: Path) -> set[str]:
 
 
 def allowed_tools(text: str) -> list[str]:
-    """Tokens on the frontmatter `allowed-tools:` line (empty if absent)."""
-    match = re.search(r"^allowed-tools:\s*(.+)$", text, flags=re.MULTILINE)
+    """Read `allowed-tools` only from a leading YAML frontmatter block.
+
+    Markdown body examples must not be mistaken for an actual tool grant.
+    Keep the canonical single-line comma-separated format used by ARIS.
+    """
+    frontmatter = re.match(
+        r"\A\ufeff?---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, flags=re.DOTALL
+    )
+    if not frontmatter:
+        return []
+    match = re.search(
+        r"^allowed-tools:[ \t]*([^\r\n]+)\r?$", frontmatter.group(1), flags=re.MULTILINE
+    )
     if not match:
         return []
     return [tok.strip() for tok in match.group(1).split(",") if tok.strip()]
