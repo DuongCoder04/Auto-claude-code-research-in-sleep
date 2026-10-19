@@ -139,8 +139,12 @@ def test_fanout_skills_scope_agent_to_leaf_and_preserve_lean_implementation_work
         for skill_file in MAINLINE_SKILLS.glob("*/SKILL.md")
         if agent_grants(read(skill_file))
     }
-    assert skills_with_agent_grants == FANOUT_SKILLS | {"lean-formalize"}
+    assert skills_with_agent_grants == FANOUT_SKILLS | {"lean-formalize", "citation-crosscheck"}
     assert agent_grants(read(MAINLINE_SKILLS / "lean-formalize" / "SKILL.md")) == ["Agent"]
+
+    # The citation workflow has distinct blind A/B/C extraction contexts;
+    # its final verdict belongs to the main agent, not these generation leaves.
+    assert agent_grants(read(MAINLINE_SKILLS / "citation-crosscheck" / "SKILL.md")) == ["Agent"]
 
     expected_grant = f"Agent({EXPECTED_CONTRACT['ARIS_FANOUT_AGENT_TYPE']})"
     for skill_name in FANOUT_SKILLS:
