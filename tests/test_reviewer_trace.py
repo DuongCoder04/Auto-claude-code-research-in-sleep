@@ -15,10 +15,12 @@ import provenance  # noqa: E402
 import review_gate  # noqa: E402
 
 
-def save_trace(tmp_path: Path, *arguments: str, mode: str = "full") -> tuple[dict, dict, dict]:
+def save_trace(
+    tmp_path: Path, *arguments: str, mode: str = "full", response: str = "Review result.",
+) -> tuple[dict, dict, dict]:
     result = subprocess.run(
         ["bash", str(TRACE_SCRIPT), "--skill", "research-review", "--purpose", "review",
-         "--prompt", "Read the assigned files.", "--response", "Review result.",
+         "--prompt", "Read the assigned files.", "--response", response,
          "--trace-mode", mode, *arguments],
         cwd=tmp_path, text=True, capture_output=True,
     )
@@ -41,7 +43,7 @@ def test_actual_reported_model_controls_trace_assurance(
     request, meta, run_meta = save_trace(
         tmp_path, "--backend", backend, "--executor-model", "gpt-6-astra",
         "--model", "gpt-6-astra", "--requested-reviewer-model", "gpt-6-astra",
-        "--reported-reviewer-model", actual, "--review-completed", "--review-scope-complete",
+        "--reported-reviewer-model", actual, "--review-completed", "--review-positive", "--review-scope-complete",
         "--verdict", "ready", mode=mode,
     )
     for artifact in (request, meta):
@@ -53,6 +55,7 @@ def test_actual_reported_model_controls_trace_assurance(
         assert artifact["acceptance_status"] == "accepted"
         assert artifact["review_completed"] is True
         assert artifact["review_scope_complete"] is True
+        assert artifact["review_positive"] is True
         assert artifact["status"] == "ok"
         assert artifact["independence_verified"] == "unverified"
     assert request["reviewer_family"] == meta["model_family"] == family
@@ -69,7 +72,7 @@ def test_claude_code_with_deepseek_is_same_family_when_executor_is_deepseek(tmp_
     request, meta, _ = save_trace(
         tmp_path, "--backend", "claude-code", "--executor-model", "deepseek-v3",
         "--model", "claude-opus-5-5-high", "--reported-reviewer-model", "deepseek-flash",
-        "--review-completed", "--review-scope-complete", "--verdict", "PASS",
+        "--review-completed", "--review-positive", "--review-scope-complete", "--verdict", "PASS",
     )
     for artifact in (request, meta):
         assert artifact["reviewer_model"] == "deepseek-flash"
@@ -81,7 +84,6 @@ def test_claude_code_with_deepseek_is_same_family_when_executor_is_deepseek(tmp_
 @pytest.mark.parametrize("arguments", [
     ["--reported-reviewer-model", "grok-4.7-build", "--review-scope-complete", "--verdict", "ready"],
     ["--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--verdict", "ready"],
-    ["--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-scope-complete", "--verdict", "not ready"],
     ["--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-scope-complete", "--verdict", "ready", "--status", "error"],
     ["--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-scope-complete", "--verdict", "ready", "--status", "unknown"],
     ["--reported-reviewer-model", "unknown", "--review-completed", "--review-scope-complete", "--verdict", "ready"],
@@ -94,19 +96,20 @@ def test_trace_never_accepts_missing_evidence_or_failed_result(
     request, meta, _ = save_trace(
         tmp_path, "--backend", "grok", "--executor-model", "gpt-6-astra",
         "--model", "grok-4.7", "--requested-reviewer-model", "grok-4.7",
-        *arguments, mode=mode,
+        "--review-positive", *arguments, mode=mode,
     )
     for artifact in (request, meta):
         assert artifact["acceptance_status"] == "provisional"
+        assert artifact["review_positive"] is True
         if "error" in arguments:
             assert artifact["status"] == "error"
 
 
-@pytest.mark.parametrize("verdict", ["ready", "almost", "PASS", "WARN"])
-def test_complete_successful_nonblocking_trace_can_be_accepted(tmp_path: Path, verdict: str) -> None:
+@pytest.mark.parametrize("verdict", ["ready", "almost", "PASS", "WARN", "clean"])
+def test_trace_uses_the_skill_positive_gate_without_parsing_raw_verdict(tmp_path: Path, verdict: str) -> None:
     request, meta, _ = save_trace(
         tmp_path, "--backend", "grok", "--executor-model", "gpt-6-astra",
-        "--reported-reviewer-model", "grok-4.7-build", "--review-completed",
+        "--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-positive",
         "--review-scope-complete", "--verdict", verdict,
     )
     assert request["acceptance_status"] == meta["acceptance_status"] == "accepted"
@@ -116,7 +119,7 @@ def test_complete_successful_nonblocking_trace_can_be_accepted(tmp_path: Path, v
 def test_trace_accepts_successful_status_spellings(tmp_path: Path, status: str) -> None:
     request, _, _ = save_trace(
         tmp_path, "--backend", "grok", "--executor-model", "gpt-6-astra",
-        "--reported-reviewer-model", "grok-4.7-build", "--review-completed",
+        "--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-positive",
         "--review-scope-complete", "--verdict", "WARN", "--status", status,
     )
     assert request["status"] == status
@@ -126,16 +129,52 @@ def test_trace_accepts_successful_status_spellings(tmp_path: Path, status: str) 
 def test_warn_without_completed_scope_does_not_accept(tmp_path: Path) -> None:
     request, _, _ = save_trace(
         tmp_path, "--backend", "grok", "--executor-model", "gpt-6-astra",
-        "--reported-reviewer-model", "grok-4.7-build", "--verdict", "WARN",
+        "--reported-reviewer-model", "grok-4.7-build", "--verdict", "WARN", "--review-positive",
     )
     assert request["verdict"] == "WARN"
     assert request["acceptance_status"] == "provisional"
 
 
+@pytest.mark.parametrize("mode", ["full", "meta"])
+@pytest.mark.parametrize("score", [5, 8])
+def test_ready_text_never_implies_a_positive_skill_gate(tmp_path: Path, mode: str, score: int) -> None:
+    request, meta, _ = save_trace(
+        tmp_path, "--backend", "grok", "--executor-model", "gpt-6-astra",
+        "--reported-reviewer-model", "grok-4.7-build", "--review-completed",
+        "--review-scope-complete", "--verdict", "ready", mode=mode,
+        response=f"Score: {score}/10\nVerdict: ready",
+    )
+    for artifact in (request, meta):
+        assert artifact["review_completed"] is True
+        assert artifact["review_scope_complete"] is True
+        assert artifact["review_positive"] is False
+        assert artifact["verdict"] == "ready"
+        assert artifact["acceptance_status"] == "provisional"
+
+
+@pytest.mark.parametrize("score", [5, 8])
+def test_trace_and_score_gate_agree_when_caller_forwards_the_gate_result(tmp_path: Path, score: int) -> None:
+    transition = review_gate.evaluate_transition(
+        round_backend="grok", score=score, verdict="ready",
+        executor_model="gpt-6-astra", reviewer_model="grok-4.7-build",
+        review_completed=True, review_scope_complete=True, review_status="ok",
+    )
+    positive_flags = ["--review-positive"] if transition.decision == "stop" else []
+    request, meta, _ = save_trace(
+        tmp_path, "--backend", "grok", "--executor-model", "gpt-6-astra",
+        "--reported-reviewer-model", "grok-4.7-build", "--review-completed",
+        "--review-scope-complete", "--verdict", "ready", *positive_flags,
+        response=f"Score: {score}/10\nVerdict: ready",
+    )
+    for artifact in (request, meta):
+        assert artifact["acceptance_status"] == transition.acceptance_status
+        assert artifact["review_positive"] is bool(positive_flags)
+
+
 def test_unknown_executor_cannot_be_accepted(tmp_path: Path) -> None:
     request, _, _ = save_trace(
         tmp_path, "--backend", "grok", "--executor-model", "mystery-executor",
-        "--reported-reviewer-model", "grok-4.7-build", "--review-completed",
+        "--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-positive",
         "--review-scope-complete", "--verdict", "ready",
     )
     assert request["review_independence"] == "unknown"
@@ -145,7 +184,7 @@ def test_unknown_executor_cannot_be_accepted(tmp_path: Path) -> None:
 def test_copilot_compatibility_trace_stays_drive_only(tmp_path: Path) -> None:
     request, _, _ = save_trace(
         tmp_path, "--backend", "copilot", "--executor-model", "claude-sonnet-4.5",
-        "--reported-reviewer-model", "gpt-5.4", "--review-completed",
+        "--reported-reviewer-model", "gpt-5.4", "--review-completed", "--review-positive",
         "--review-scope-complete", "--verdict", "ready",
     )
     assert request["review_independence"] == "cross-family"
@@ -155,7 +194,7 @@ def test_copilot_compatibility_trace_stays_drive_only(tmp_path: Path) -> None:
 def test_unknown_backend_remains_traceable_without_acceptance(tmp_path: Path) -> None:
     request, _, _ = save_trace(
         tmp_path, "--backend", "mystery-backend", "--executor-model", "gpt-6-astra",
-        "--reported-reviewer-model", "grok-4.7-build", "--review-completed",
+        "--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-positive",
         "--review-scope-complete", "--verdict", "ready",
     )
     assert request["backend"] == "mystery-backend"
@@ -165,7 +204,7 @@ def test_unknown_backend_remains_traceable_without_acceptance(tmp_path: Path) ->
 def test_call_assurance_does_not_reuse_initial_run_identity_or_acceptance(tmp_path: Path) -> None:
     _, _, initial = save_trace(
         tmp_path, "--backend", "grok", "--executor-model", "gpt-6-astra",
-        "--reported-reviewer-model", "grok-4.7-build", "--review-completed",
+        "--reported-reviewer-model", "grok-4.7-build", "--review-completed", "--review-positive",
         "--review-scope-complete", "--verdict", "ready",
     )
     request, meta, run_meta = save_trace(

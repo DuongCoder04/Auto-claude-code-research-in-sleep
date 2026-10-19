@@ -34,9 +34,10 @@
 
 set -euo pipefail
 
-# New reviewer assurance flags: --review-completed --review-scope-complete
-# --verdict ready|almost|pass|warn. Completion covers the requested review scope;
-# --status records the call outcome and is never inferred from the verdict.
+# Reviewer assurance flags: --review-completed --review-scope-complete
+# --review-positive (only when the skill's own gate is positive). --verdict keeps
+# the raw assessment; this helper does not infer positivity from text or scores.
+# --status records the call outcome independently.
 
 # --- Parse arguments ---
 SKILL="" PURPOSE="" MODEL="" THREAD_ID="" PROMPT="" RESPONSE=""
@@ -45,7 +46,7 @@ BACKEND="" TOOL="" EXECUTOR="" EXECUTOR_MODEL="" EXECUTOR_FAMILY="" REVIEWER_PRO
 REQUESTED_REVIEWER_MODEL="" REPORTED_REVIEWER_MODEL="" MEMORY_HASH=""
 EXECUTOR_MODEL_SOURCE="unavailable" REVIEWER_MODEL_SOURCE="unavailable" FAMILY_RELATION="unknown"
 NATIVE_EVIDENCE="" NATIVE_EVIDENCE_ID="" NATIVE_EVIDENCE_PATH=""
-REVIEW_COMPLETED=false REVIEW_SCOPE_COMPLETE=false VERDICT=""
+REVIEW_COMPLETED=false REVIEW_SCOPE_COMPLETE=false REVIEW_POSITIVE=false VERDICT=""
 REVIEW_INDEPENDENCE="unknown" ACCEPTANCE_STATUS="provisional"
 
 while [[ $# -gt 0 ]]; do
@@ -76,6 +77,7 @@ while [[ $# -gt 0 ]]; do
     --native-evidence)    NATIVE_EVIDENCE="$2";    shift 2 ;;
     --review-completed)   REVIEW_COMPLETED=true; shift ;;
     --review-scope-complete) REVIEW_SCOPE_COMPLETE=true; shift ;;
+    --review-positive)    REVIEW_POSITIVE=true; shift ;;
     --verdict)            VERDICT="$2"; shift 2 ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
@@ -219,17 +221,13 @@ case "$FAMILY_RELATION" in
   same) REVIEW_INDEPENDENCE="same-family" ;;
   different) REVIEW_INDEPENDENCE="cross-family" ;;
 esac
-if $REVIEW_COMPLETED && $REVIEW_SCOPE_COMPLETE && \
+if $REVIEW_COMPLETED && $REVIEW_SCOPE_COMPLETE && $REVIEW_POSITIVE && \
    [[ "$REVIEW_INDEPENDENCE" == "cross-family" ]] && \
    [[ "$REVIEWER_MODEL_SOURCE" == "backend-reported" || "$REVIEWER_MODEL_SOURCE" == "host-session-event" ]]; then
   case "$(lowercase "${BACKEND:-codex}")" in
     codex|manual|copilot-native|oracle-pro|agy|llm-chat|antigravity|grok|claude-code)
       case "$(lowercase "$STATUS")" in
-        ok|fallback_used|success|completed)
-          case "$(lowercase "$VERDICT")" in
-            ready|almost|pass|warn) ACCEPTANCE_STATUS="accepted" ;;
-          esac
-          ;;
+        ok|fallback_used|success|completed) ACCEPTANCE_STATUS="accepted" ;;
       esac
       ;;
   esac
@@ -317,7 +315,7 @@ if [[ "$TRACE_MODE" == "full" ]]; then
   ST_NATIVE_EVIDENCE_PATH="$NATIVE_EVIDENCE_PATH" \
   ST_REVIEWER_MODEL="$EFFECTIVE_REVIEWER_MODEL" ST_REVIEW_INDEPENDENCE="$REVIEW_INDEPENDENCE" \
   ST_ACCEPTANCE_STATUS="$ACCEPTANCE_STATUS" ST_REVIEW_COMPLETED="$REVIEW_COMPLETED" \
-  ST_REVIEW_SCOPE_COMPLETE="$REVIEW_SCOPE_COMPLETE" ST_VERDICT="$VERDICT" \
+  ST_REVIEW_SCOPE_COMPLETE="$REVIEW_SCOPE_COMPLETE" ST_REVIEW_POSITIVE="$REVIEW_POSITIVE" ST_VERDICT="$VERDICT" \
   ST_OUT="${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.request.json" python3 -c '
 import json, os, sys
 e = os.environ
@@ -341,6 +339,7 @@ data = {
     "acceptance_status": e["ST_ACCEPTANCE_STATUS"],
     "review_completed": e["ST_REVIEW_COMPLETED"] == "true",
     "review_scope_complete": e["ST_REVIEW_SCOPE_COMPLETE"] == "true",
+    "review_positive": e["ST_REVIEW_POSITIVE"] == "true",
     "verdict": e.get("ST_VERDICT") or None,
     "executor": e.get("ST_EXECUTOR") or "claude-code",
     "executor_model": e.get("ST_EXECUTOR_MODEL") or None,
@@ -378,7 +377,7 @@ else
   ST_NATIVE_EVIDENCE_PATH="$NATIVE_EVIDENCE_PATH" \
   ST_REVIEWER_MODEL="$EFFECTIVE_REVIEWER_MODEL" ST_REVIEW_INDEPENDENCE="$REVIEW_INDEPENDENCE" \
   ST_ACCEPTANCE_STATUS="$ACCEPTANCE_STATUS" ST_REVIEW_COMPLETED="$REVIEW_COMPLETED" \
-  ST_REVIEW_SCOPE_COMPLETE="$REVIEW_SCOPE_COMPLETE" ST_VERDICT="$VERDICT" \
+  ST_REVIEW_SCOPE_COMPLETE="$REVIEW_SCOPE_COMPLETE" ST_REVIEW_POSITIVE="$REVIEW_POSITIVE" ST_VERDICT="$VERDICT" \
   ST_OUT="${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.request.json" python3 -c '
 import json, os
 e = os.environ
@@ -402,6 +401,7 @@ data = {
     "acceptance_status": e["ST_ACCEPTANCE_STATUS"],
     "review_completed": e["ST_REVIEW_COMPLETED"] == "true",
     "review_scope_complete": e["ST_REVIEW_SCOPE_COMPLETE"] == "true",
+    "review_positive": e["ST_REVIEW_POSITIVE"] == "true",
     "verdict": e.get("ST_VERDICT") or None,
     "prompt_length": int(e["ST_PLEN"]),
     "response_length": int(e["ST_RLEN"]),
@@ -437,7 +437,7 @@ ST_MEMORY_HASH="$MEMORY_HASH" ST_NATIVE_EVIDENCE_ID="$NATIVE_EVIDENCE_ID" \
 ST_NATIVE_EVIDENCE_PATH="$NATIVE_EVIDENCE_PATH" \
 ST_REVIEWER_MODEL="$EFFECTIVE_REVIEWER_MODEL" ST_REVIEW_INDEPENDENCE="$REVIEW_INDEPENDENCE" \
 ST_ACCEPTANCE_STATUS="$ACCEPTANCE_STATUS" ST_REVIEW_COMPLETED="$REVIEW_COMPLETED" \
-ST_REVIEW_SCOPE_COMPLETE="$REVIEW_SCOPE_COMPLETE" ST_VERDICT="$VERDICT" \
+ST_REVIEW_SCOPE_COMPLETE="$REVIEW_SCOPE_COMPLETE" ST_REVIEW_POSITIVE="$REVIEW_POSITIVE" ST_VERDICT="$VERDICT" \
 ST_OUT="${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.meta.json" python3 -c '
 import json, os
 e = os.environ
@@ -461,6 +461,7 @@ data = {
     "acceptance_status": e["ST_ACCEPTANCE_STATUS"],
     "review_completed": e["ST_REVIEW_COMPLETED"] == "true",
     "review_scope_complete": e["ST_REVIEW_SCOPE_COMPLETE"] == "true",
+    "review_positive": e["ST_REVIEW_POSITIVE"] == "true",
     "verdict": e.get("ST_VERDICT") or None,
     "executor": e.get("ST_EXECUTOR") or "claude-code",
     "executor_model": e.get("ST_EXECUTOR_MODEL") or None,

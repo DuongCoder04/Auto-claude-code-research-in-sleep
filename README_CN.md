@@ -369,7 +369,7 @@ claude
 
 > **可选 Grok CLI 桥接：** [`grok-exec`](mcp-servers/grok-exec/README.md) 复用已有 CLI 登录，提供 `grok` / `grok-reply`，默认 `grok-4.7` + `xhigh`，支持会话续接、进度与取消。
 
-> **可选 Antigravity CLI 桥接：** [`antigravity-exec`](mcp-servers/antigravity-exec/README.md) 复用已有 CLI 登录，提供 `antigravity` / `antigravity-reply`，默认 Gemini 3.8 Flash（High），支持原生会话续接。两者供用户明确点名时直接调用；安装不会改动现有 skills 的 reviewer 路由，`— reviewer: agy` 仍使用 `gemini-review`。
+> **可选 CLI reviewer：** 完整包可通过 `— reviewer: antigravity` / `grok` 使用 [Antigravity](mcp-servers/antigravity-exec/README.md) 和 [Grok](mcp-servers/grok-exec/README.md)，详见 [backend 契约](skills/shared-references/reviewer-backends.md)。旧 `— reviewer: agy` 仍使用 `gemini-review`。
 
 > 不需要全部 84 个 skill？见下方[选择性安装](#install-skills)按组/按 skill 挑选。
 
@@ -497,13 +497,13 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 
 **重要：** ARIS skill 现在在每个 fresh call 里显式钉住 reviewer（`model: gpt-6-astra` + 按档位的 reasoning effort）——`~/.codex/config.toml` 不再静默决定 reviewer。仍建议在其中写 `model = "gpt-6-astra"`：它覆盖 codex 原生/mirror 会话和任何未钉住的调用。`ultra`/`max` 档需要 codex-cli ≥ 0.144.1 并重启 session。
 
-**想让 Codex 执行、Claude Code 审稿？** 见 [`docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md`](docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md)。这条路径会先安装基础 `skills/skills-codex/*`，再叠加 `skills/skills-codex-claude-review/*`，并通过本地 `claude-review` MCP bridge 转发 review-heavy skill 的审稿请求。
+**在 Codex 中选择 reviewer：** 安装完整 [`skills/skills-codex/`](skills/skills-codex/README_CN.md) 包，调用时指定 `— reviewer: claude-code`、`antigravity` 或 `grok`。桥接配置和续接规则见 [backend 契约](skills/skills-codex/shared-references/reviewer-backends.md)。
 
-**想让 Codex 执行、Gemini 在本地做审稿？** 见 [`docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md`](docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md) 和[英文版](docs/CODEX_GEMINI_REVIEW_GUIDE.md)。这条路径会先安装基础 `skills/skills-codex/*`，再叠加 `skills/skills-codex-gemini-review/*`，并通过本地 `gemini-review` MCP bridge 转发 reviewer-aware 预定义 skills 的审稿请求，默认 direct Gemini API。
+旧 Claude/Gemini partial overlays 已冻结，保留已有安装；请按[安全迁移说明](skills/skills-codex/README_CN.md#迁移已冻结的-partial-overlay)切换完整包。原 [Claude](docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md) 和 [Gemini](docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md) 指南保留为旧安装资料。
 
 **想走 Codex mirror 安装链？** 项目级受管安装用 `tools/install_aris_codex.sh`，copy 安装更新用 `tools/smart_update_codex.sh`。Claude 脚本仍然是 Claude 主线入口。
 
-Codex 基础镜像默认由新的 Codex `spawn_agent` 自审：流程可以继续，但结果明确记录为 `same-family / provisional`。只有 Claude/Gemini overlay 或确定性验证才能记录 `accepted`；投稿报告会据此输出 `submission-ready: provisional | yes | no`。
+Codex 基础镜像默认使用新的 Codex reviewer，同家族审阅仍为 `provisional`。其他路由须核对实际模型身份并完成指定范围审阅，才能记录跨家族验收；选择后端本身不代表通过。投稿及确定性验证 gate 继续适用。
 
 </details>
 

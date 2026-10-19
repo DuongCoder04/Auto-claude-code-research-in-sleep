@@ -3,15 +3,19 @@
 > **Codex mirror adaptation (normative).** Codex uses `spawn_agent` for Tier-2
 > shards when delegation is available and the same structured sequential
 > fallback otherwise. Generator shards remain read-only and never judge their
-> candidates. A Codex jury is same-family and records provisional; a
-> Claude/Gemini overlay or deterministic verifier records accepted.
+> candidates. The default native Codex jury stays same-family/provisional.
+> Select other reviewers via [Selectable Reviewers](reviewer-backends.md).
+> Accepted semantic assurance needs a completed positive in-scope review with
+> known different actual model families. Deterministic verifiers accept only
+> the mechanical obligations they actually check.
 
 When a skill needs **breadth** — many candidate ideas, many sources, many
 attack angles, many proof obligations, many draft sections — it may fan
 the generation step out across same-family subagents. This document is
 the canonical convention for doing that **without** weakening assurance:
-base Codex review remains provisional, while overlays and deterministic checks
-are the accepted routes.
+base Codex review remains provisional. A completed positive cross-family
+review can support accepted semantic assurance; deterministic checks retain
+their mechanical scope.
 
 Rule of thumb: **Fan-out is 火力 (firepower); the jury is 裁判席 (the
 bench). Subagents GENERATE candidates; they NEVER score them.** Fan-out
@@ -19,7 +23,9 @@ multiplies how much breadth you can cover per unit time. It does not, and
 must not, change *who renders the verdict*. The verdict stays a single,
 separately classified jury step — identical whether you fanned out across 8
 parallel workers or ran one shard at a time on a slow night. In the base mirror
-it is Codex/same-family/provisional; overlay or deterministic routes are accepted.
+it is Codex/same-family/provisional. Another selected route is accepted only
+when known different actual model families, completed scope and a positive
+verdict justify it.
 
 ## Core principle: decouple FAN-OUT from JURY
 
@@ -29,7 +35,7 @@ rules:
 | | FAN-OUT (breadth) | JURY (verdict) |
 |---|---|---|
 | What it does | Generates N candidate items | Renders the STOP/ACCEPT decision |
-| Who runs it | Same-family subagents (Codex shards) | Fresh Codex (provisional) or overlay/deterministic route (accepted) |
+| Who runs it | Same-family subagents (Codex shards) | Selected reviewer: same-family stays provisional; accepted semantic judgment requires completed positive cross-family review |
 | Allowed to judge quality? | **No.** Generate only. | **Yes.** That is its only job. |
 | Failure if violated | None (it's just more candidates) | Invariant breach: model judges its own family's output |
 | Analogy | 火力 — fire more shots | 裁判席 — the bench that rules |
@@ -67,7 +73,8 @@ Workflow true parallelism) merely *accelerates* the same pattern.
 Therefore fan-out must degrade gracefully across runtimes. The three
 tiers below differ **only** in how the candidate-generation step is
 dispatched. They terminate in the **identical classified** jury step: fresh
-Codex is provisional, while overlay/deterministic routes are accepted.
+Codex is provisional; accepted semantic assurance requires a completed
+positive cross-family review with the same scope.
 
 | Tier | Dispatch mechanism | When available |
 |---|---|---|
@@ -169,7 +176,7 @@ judgment:
 
 Required ordering: **dedup BEFORE jury, on the merged union.** This is
 not just hygiene — it is a cost-control invariant. The jury backend
-(fresh Codex / overlay / deterministic verifier) can be rate-limited and
+(selected model reviewer, or a verifier for mechanical obligations) can be rate-limited and
 token-expensive. Sending it 40 candidates of which 25 are near-duplicate is a
 waste of review budget and invites rate-limit failure mid-verdict. Mechanical
 dedup first keeps the classified review step lean.
@@ -237,8 +244,9 @@ these lenses run as parallel shards; on Tier 3 they are enumerated in one
 pass. After fan-out the merged set should be **mechanically deduped only**
 (cluster near-identical ideas; never drop one for being "weak"). The
 **jury** is the already-existing Phase-4 fresh-Codex devil's-advocate
-pass: it is provisional in the base mirror and accepted only through an overlay
-or deterministic verifier; it surfaces the strongest reviewer objection per
+pass: it is provisional with a same-family reviewer; accepted semantic assurance
+requires a completed positive cross-family review covering the whole set. It
+surfaces the strongest reviewer objection per
 idea and ranks for a top venue. `/idea-creator` declares the `Agent` tool — re-granted (per the re-grant
 rule in **Allowed-tools hygiene**) when the lens fan-out was wired, after
 the WB2 sweep had stripped the earlier vestigial grant. On a Tier-1 runtime
@@ -295,9 +303,10 @@ Two invariants keep a fan-out from manufacturing or laundering errors:
 
 ## Cross-references
 
-- **`reviewer-routing.md`** — jury backend selection. The default fresh Codex
-  `spawn_agent` route is same-family/provisional; a Claude/Gemini overlay or
-  deterministic verifier is accepted. Fan-out tier never changes that class.
+- **`reviewer-backends.md`** / **`reviewer-routing.md`** — jury backend selection.
+  The default fresh native Codex route stays same-family/provisional. Accepted
+  semantic assurance requires a completed positive in-scope review with known
+  different actual model families. Fan-out tier never changes that class.
 - **`reviewer-independence.md`** — the jury call receives **file paths
   only**, in a **fresh thread**, with no executor summary/interpretation.
   This applies to the post-fan-out jury exactly as to any other review:
@@ -307,7 +316,8 @@ Two invariants keep a fan-out from manufacturing or laundering errors:
   EXECUTION-completeness (exit code, files exist, N shards returned, PDF
   compiled) is SAFE same-model; self-judging QUALITY/CORRECTNESS (idea
   novel, proof valid, claim supported, review satisfied) is provisional under
-  base Codex review and accepted only with an overlay/deterministic route. A
+  base Codex review; accepted semantic assurance requires a completed positive
+  cross-family review of the full obligation. A
   fan-out loop may self-verify *that all N shards ran*; it may not silently
   promote *that the candidates are good* to accepted. The loop can DRIVE; it
   cannot ACQUIT as accepted.
@@ -332,8 +342,10 @@ A SKILL that fans out must specify all of:
    executor, judgment-free, declared metric — to control jury cost and
    rate-limit exposure.
 4. **A single classified jury step** (per `reviewer-routing.md` +
-   `reviewer-independence.md`) — base Codex is provisional; overlay or a
-   deterministic verifier is accepted — that is **identical** across all tiers.
+   `reviewer-independence.md`) — same-family stays provisional; accepted semantic
+   assurance requires a completed positive in-scope cross-family review. A
+   deterministic verifier accepts only its mechanical scope. This gate is
+   **identical** across all tiers.
 5. **A breadth-bound justification.** State why this task benefits from
    breadth. If the deliverable IS a verdict, do not fan out the verdict;
    fan out only the evidence that feeds it.

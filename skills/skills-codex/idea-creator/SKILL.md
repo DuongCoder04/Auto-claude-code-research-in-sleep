@@ -5,6 +5,17 @@ description: "Generate and rank research ideas given a broad direction. Use when
 
 # Research Idea Creator
 
+> **Before each reviewer slot**, follow [Selectable Reviewers](../shared-references/reviewer-backends.md):
+> resolve invocation → `.aris/reviewer.json` → Codex default (fresh native reviewer)
+> with `reviewer_route.py` through the canonical helper resolver, preserving this
+> slot's tier, fresh contexts, source/image inputs and deterministic gates.
+> Codex examples/pins below apply only to `backend=codex`; other routes use their
+> own first-call/reply contract. Save the route and actual returned identity;
+> unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
+> families/completion/scope. Forward invocation reviewer/model/effort overrides
+> to reviewer-bearing children. Generation workers are unchanged.
+
+
 Generate publishable research ideas for: $ARGUMENTS
 
 ## Overview
@@ -13,11 +24,15 @@ Given a broad research direction from the user, systematically generate, validat
 
 ## Constants
 
+Reviewer overrides apply to Phase 4 and reviewer-bearing children. Phase 2
+brainstorming and native lens workers keep their existing generation model; do
+not pass a selected MCP reviewer model into a native generation call.
+
 - **PILOT_MAX_HOURS = 2** — Skip any pilot estimated to take > 2 hours per GPU. Flag as "needs manual pilot".
 - **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill pilots exceeding 3 hours. Collect partial results if available.
 - **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
-- **REVIEWER_MODEL = `gpt-6-astra`** — Model used via a secondary Codex agent for brainstorming and review. Must be an OpenAI model (e.g., `gpt-6-astra`, `o3`, `gpt-4o`).
+- **REVIEWER_MODEL = `gpt-6-astra`** — Model used via a secondary Codex agent for brainstorming and review. For `backend=codex`, use an OpenAI model (e.g., `gpt-6-astra`, `o3`, `gpt-4o`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex xhigh reviewer through `spawn_agent` / `send_input`. Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and fall back to Codex xhigh.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 
@@ -32,8 +47,8 @@ analytic lens when delegation is available; otherwise run the same lenses
 sequentially in fresh contexts. Each shard is read-only and returns
 `{"shard_id": ..., "candidates": [{"payload": ..., "dedup_key": ...}]}`.
 Merge and mechanically deduplicate by `dedup_key`; shards must not rank, reject,
-or write shared files. The final Codex jury sees the full deduped set and records
-same-family provisional, never accepted. See
+or write shared files. The final selected reviewer sees the full deduped set; record its actual
+identity and completion. Same-family positives remain provisional. See
 [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 
 ### Phase 0: Load Research Wiki (if active)
@@ -153,7 +168,7 @@ Map the research area to understand what exists and where the gaps are.
 
 ### Phase 2: Idea Generation (brainstorm with external LLM)
 
-Use a secondary Codex agent for divergent thinking:
+Use a secondary Codex generation agent for divergent thinking (this is not the reviewer slot):
 
 ```
 spawn_agent:
