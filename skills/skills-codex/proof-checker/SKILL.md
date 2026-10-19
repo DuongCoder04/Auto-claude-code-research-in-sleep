@@ -2,15 +2,26 @@
 name: proof-checker
 description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via fresh-agent Codex GPT-6-Astra ultra review, fixes each gap with full derivations, re-reviews, and generates an audit report. Base review is same-family provisional. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
 argument-hint: "[path-to-tex-file or proof-description]"
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
 
+> **Before each reviewer slot**, follow [Selectable Reviewers](../shared-references/reviewer-backends.md):
+> resolve invocation → `.aris/reviewer.json` → Codex default (fresh native reviewer)
+> with `reviewer_route.py` through the canonical helper resolver, preserving this
+> slot's tier, fresh contexts, source/image inputs and deterministic gates.
+> Codex examples/pins below apply only to `backend=codex`; other routes use their
+> own first-call/reply contract. Save the route and actual returned identity;
+> unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
+> families/completion/scope. Forward invocation reviewer/model/effort overrides
+> to reviewer-bearing children. Generation workers are unchanged.
+
+
 > **Codex assurance:** base Codex proof judgments are
 > `review_independence: same-family` and `acceptance_status: provisional`.
 > Deterministic compilation/algebra checks may be accepted; a semantic proof
-> acceptance requires a cross-family overlay. Reviewer failure emits BLOCKED.
+> acceptance requires a completed positive review with known different model families. Reviewer failure emits BLOCKED.
 
 Systematically verify a mathematical proof via fresh-agent adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
 
@@ -233,6 +244,8 @@ and unsuccessful counterexample searches do not discharge a proof obligation.
 
 Submit the **complete proof content** with the following **mandatory reviewer checklist** in the prompt:
 
+> Resolve this reviewer slot first; the following is the `backend=codex` example.
+
 ```text
 spawn_agent:
   model: gpt-6-astra
@@ -364,6 +377,8 @@ After all fixes, verify the proof as a whole:
 
 #### Independent second review for FATAL/CRITICAL fixes
 For any fix that resolved a FATAL or CRITICAL issue, submit the **fixed section alone** (without showing the previous critique) to a **fresh Codex thread**:
+
+> Resolve this reviewer slot first; the following is the `backend=codex` example.
 
 ```text
 spawn_agent:
@@ -528,8 +543,8 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   "executor_family":  "openai",
   "reviewer_model":   "gpt-6-astra",
   "reviewer_family":  "openai",
-  "review_independence": "same-family",
-  "acceptance_status": "provisional",
+  "review_independence": "<actual family comparison>",
+  "acceptance_status": "<actual acceptance status>",
   "reviewer_reasoning": "ultra",
   "generated_at":     "<UTC ISO-8601>",
   "details": {

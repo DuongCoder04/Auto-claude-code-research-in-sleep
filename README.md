@@ -413,7 +413,7 @@ claude
 
 > **Optional Grok CLI bridge:** [`grok-exec`](mcp-servers/grok-exec/README.md) exposes `grok` / `grok-reply` using your existing Grok CLI login, with `grok-4.7` + `xhigh` defaults, persistent sessions, progress and cancellation. It is a separate MCP service; installing it does not change the reviewer routing of existing skills.
 
-> **Optional Antigravity CLI bridge:** [`antigravity-exec`](mcp-servers/antigravity-exec/README.md) exposes `antigravity` / `antigravity-reply` through your existing CLI login, defaulting to Gemini 3.8 Flash (High). Supports native conversation resume and cancellation; existing reviewer routes stay unchanged. These are direct consultation tools, not new `— reviewer:` values; `— reviewer: agy` still uses `gemini-review`.
+> **Selectable CLI reviewers:** [`antigravity-exec`](mcp-servers/antigravity-exec/README.md) and [`grok-exec`](mcp-servers/grok-exec/README.md) support the complete packs through `— reviewer: antigravity` / `grok`; see the [backend contract](skills/shared-references/reviewer-backends.md). The legacy `— reviewer: agy` still uses `gemini-review`.
 
 <details>
 <summary><b>📚 Research Wiki (optional)</b> — one-line init for persistent memory across sessions; see <a href="#-research-wiki--persistent-research-memory">full Research Wiki section</a></summary>
@@ -545,13 +545,13 @@ Run `aris doctor` to inspect the currently reported sandbox state. `strictMode` 
 
 **Important:** ARIS skills pin the reviewer explicitly (`model: gpt-6-astra` + a per-tier reasoning effort) in every fresh call — your `~/.codex/config.toml` no longer silently decides the reviewer. Still set `model = "gpt-6-astra"` there (recommended): it covers codex-native/mirror sessions and anything that doesn't pin. `ultra`/`max` effort needs codex-cli ≥ 0.144.1 + a session restart.
 
-**Want Codex to execute but Claude Code to review?** See [`docs/CODEX_CLAUDE_REVIEW_GUIDE.md`](docs/CODEX_CLAUDE_REVIEW_GUIDE.md). That path installs the base `skills/skills-codex/*`, then overlays `skills/skills-codex-claude-review/*`, and routes review-heavy skills through the local `claude-review` MCP bridge.
+**Choose a reviewer in Codex:** install the full [`skills/skills-codex/`](skills/skills-codex/README.md) pack and select `— reviewer: claude-code`, `antigravity`, or `grok`. See the [backend contract](skills/skills-codex/shared-references/reviewer-backends.md) for bridge setup and session rules.
 
-**Want Codex to execute but Gemini to review locally?** See [`docs/CODEX_GEMINI_REVIEW_GUIDE.md`](docs/CODEX_GEMINI_REVIEW_GUIDE.md) and [CN](docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md). That path installs the base `skills/skills-codex/*`, then overlays `skills/skills-codex-gemini-review/*`, and routes the reviewer-aware predefined skills through the local `gemini-review` MCP bridge using direct Gemini API by default.
+The old Claude/Gemini partial overlays are frozen for existing installations; [migrate safely](skills/skills-codex/README.md#migrate-frozen-partial-overlays) to the full pack. The historical [Claude](docs/CODEX_CLAUDE_REVIEW_GUIDE.md) and [Gemini](docs/CODEX_GEMINI_REVIEW_GUIDE.md) guides describe those legacy installations.
 
 **Want the Codex mirror install chain?** Use `tools/install_aris_codex.sh` for managed project installs and `tools/smart_update_codex.sh` for copied Codex installs. The Claude scripts remain the mainline entry points for Claude projects.
 
-The base Codex mirror reviews through a fresh Codex `spawn_agent`: workflows may continue, but results are explicitly `same-family / provisional`. Only a Claude/Gemini overlay or deterministic verifier records `accepted`; submission reports therefore expose `submission-ready: provisional | yes | no`.
+The base Codex mirror defaults to a fresh Codex reviewer: same-family reviews remain `provisional`. Other routes require actual model identities and a completed, in-scope review before cross-family acceptance; a backend selection alone is insufficient. Submission and deterministic verification gates still apply.
 
 </details>
 

@@ -15,15 +15,17 @@ ARIS is a research harness: composable Markdown skills that orchestrate the ML r
 |----------|-----------|-------|
 | Claude Code / Cursor / Trae / Antigravity / Copilot CLI | `skills/<name>/SKILL.md` | Mainline skills; native `SKILL.md` invocation |
 | Codex CLI | `skills/skills-codex/<name>/SKILL.md` | Codex mirror; uses `spawn_agent` instead of `mcp__codex__codex` |
-| Codex + Claude-review | `skills/skills-codex-claude-review/` | Overlay on top of `skills-codex/` |
-| Codex + Gemini-review | `skills/skills-codex-gemini-review/` | Same pattern, Gemini reviewer |
+| Codex + Claude-review | `skills/skills-codex-claude-review/` | Frozen legacy overlay; use full Codex pack + reviewer selection |
+| Codex + Gemini-review | `skills/skills-codex-gemini-review/` | Frozen legacy overlay; existing links retained |
 | DeepSeek Harness | `dsh plugin --profile web add dsh-aris` | One plugin, mainline skills unchanged; see the [`dsh-aris` branch](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/tree/dsh-aris#readme) |
 
 Codex base review is a fresh same-family `spawn_agent` review. It may drive and
 complete workflows but records `review_independence: same-family` and
-`acceptance_status: provisional`. Claude/Gemini overlays or deterministic
-verifiers may record accepted; never describe base Codex self-review as
-cross-model acceptance.
+`acceptance_status: provisional`. The complete pack supports optional backends
+through [reviewer selection](skills/skills-codex/shared-references/reviewer-backends.md);
+acceptance requires actual identities, completed scope, and the applicable gate.
+The two partial overlays are frozen; [migration](skills/skills-codex/README.md#migrate-frozen-partial-overlays)
+preserves existing links and customizations.
 
 **Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **85 skills**, grouped by role.
 
@@ -36,7 +38,14 @@ Invocation syntax is identical across hosts:
 
 **The `codex` MCP server is ARIS's own.** codex-cli 0.154.0 removed `codex mcp-server`; `mcp__codex__codex` / `mcp__codex__codex-reply` are served by [`mcp-servers/codex-exec/server.py`](mcp-servers/codex-exec/README.md), a zero-dependency bridge over `codex exec` with the identical tool contract. Registration: `claude mcp add codex -s user -- python3 <aris-repo>/mcp-servers/codex-exec/server.py` (other MCP hosts: same `codex` key, command `python3` + that path). Never register `codex mcp-server`. A `codex-reply` keeps the model, effort, sandbox and cwd its thread was created with — do not re-send them.
 
-**Optional CLI consultation tools.** When the user asks to consult Grok or Gemini through Antigravity, use the separately registered [`grok-exec`](mcp-servers/grok-exec/README.md) (`grok` / `grok-reply`, default `grok-4.7` + `xhigh`) or [`antigravity-exec`](mcp-servers/antigravity-exec/README.md) (`antigravity` / `antigravity-reply`, default `gemini-3.8-flash-high` + `high`). Pass an explicit `cwd` on the first call; continue with that service's saved `threadId` and `prompt`. These are optional direct tools, not new `— reviewer:` values: existing skill routes and acceptance rules remain in effect. In particular, `— reviewer: agy` still uses `gemini-review`, and the Codex Gemini overlay still uses its `review*` tools.
+**Selectable reviewer backends.** The complete Claude Code and Codex packs support
+`— reviewer: codex|antigravity|grok|claude-code`, with invocation selection taking
+precedence over `.aris/reviewer.json` and then host defaults. See the
+[backend contract](skills/shared-references/reviewer-backends.md) for MCP setup,
+actual model identity, and first-call/continuation rules. The legacy `agy` route
+still uses `gemini-review`; existing frozen Gemini overlay links retain their
+`review*` protocol. No installer change or global configuration write is needed
+to select a reviewer in the complete pack.
 
 ## Common Parameters
 
@@ -179,10 +188,10 @@ Advisory CI lint at `.github/workflows/lint-skills-helpers.yml` flags hardcoded 
 ## Cross-Model Protocol
 
 - **Executor** (Claude / Codex / Cursor / Antigravity / Copilot): writes code, runs experiments, drafts papers
-- **Reviewer** (GPT-6-Astra via Codex MCP, default; or Claude / Gemini via `*-review` MCP overlays): critiques, scores, demands revisions
-- **Rule**: executor and reviewer **must** be different model families. Same-family review is a non-feature.
+- **Reviewer** (GPT-6-Astra by host default; or a selected backend in the complete pack): critiques, scores, demands revisions
+- **Rule**: accepted semantic review requires known different actual model families and a completed positive review within scope. Same-family adversarial review can drive revisions and stop a loop provisionally.
 - **Reviewer independence**: pass file paths only, never summaries or interpretations
-- **Thread freshness**: audit-class skills open a fresh `mcp__codex__codex` thread per review round — narrative accumulation inflates scores. `/auto-review-loop` is the documented exception: it keeps one thread across rounds via `codex-reply` (its SKILL.md governs)
+- **Thread freshness**: audit-class skills open a fresh session on the selected route at their specified review boundaries. `/auto-review-loop` retains its ordinary reviewer session across rounds; separate nightmare verification stays fresh (its SKILL.md governs).
 - **Scope limits in every reviewer prompt**: the [`review-scope-limits.md`](skills/shared-references/review-scope-limits.md) block bounds what a reviewer may *propose* (no hashes, no over-defense, no corner-case obsession, not a security product), never what it looks for
 - **Experiment integrity**: executor must NOT judge its own eval code — reviewer audits directly per [`shared-references/experiment-integrity.md`](skills/shared-references/experiment-integrity.md)
 
