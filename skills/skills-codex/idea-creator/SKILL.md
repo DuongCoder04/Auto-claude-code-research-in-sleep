@@ -42,13 +42,24 @@ not pass a selected MCP reviewer model into a native generation call.
 
 ### Fan-out contract
 
-Idea generation is breadth-bound, so use one fresh `spawn_agent` shard per
-analytic lens when delegation is available; otherwise run the same lenses
-sequentially in fresh contexts. Each shard is read-only and returns
-`{"shard_id": ..., "candidates": [{"payload": ..., "dedup_key": ...}]}`.
-Merge and mechanically deduplicate by `dedup_key`; shards must not rank, reject,
-or write shared files. The final selected reviewer sees the full deduped set; record its actual
-identity and completion. Same-family positives remain provisional. See
+Idea generation is breadth-bound. Freeze the complete analytic-lens list before
+dispatch and partition it into `max_shards: 8` or fewer. The executor may use
+at most `max_concurrency: 4` active shards and requests `max_turns: 8`,
+read-only behavior, and `recursion: false` in every leaf-equivalent prompt.
+
+**Stock Codex enforcement: prompt-only.** Standard Codex `spawn_agent` exposes
+no per-child tool allowlist, recursion flag, or child turn-cap parameter. These
+worker restrictions are prompt conventions unless the active host supplies
+structural enforcement, so stock Codex does not provide the same hard tool,
+non-recursion, and turn boundary as the Claude leaf. The executor still enforces
+fixed shard and concurrency limits, no replacement workers, and the coverage
+receipt. A failed, malformed, or timed-out shard gets at most one executor-side
+**sequential fallback** and no replacement agent. Each shard returns
+`{shard_id, assigned_unit_ids, covered_unit_ids, status, candidates, errors}`.
+Before mechanical deduplication, emit a **coverage receipt** listing planned,
+completed, failed, and uncovered lens IDs plus `coverage_complete`. The final
+selected reviewer receives both the receipt and full deduped candidate set;
+record its actual identity/completion. Same-family positives remain provisional. See
 [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 
 ### Phase 0: Load Research Wiki (if active)
