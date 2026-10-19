@@ -24,6 +24,7 @@ path mechanical and the reject path externally evidenced.
 Usage:
     python3 cx_verify.py --a cx_A_ourbib.json --b cx_B_web.json --c cx_C_fielddiff.json \
             --expect <CITED_KEY_COUNT> --expect-keys /tmp/cx_dedup_keys.txt \
+            --expect-manifest /tmp/cx_manifest.tsv \
             --json /tmp/cx_gate.json
     python3 cx_verify.py --selftest            # built-in cases (verify + build_entry), exit 2 on failure
 
@@ -35,8 +36,8 @@ Trust model (this is the point of the rewrite):
     shard, so a faulty/adversarial C that omits a differing field or forges `blind:true`
     could otherwise obtain a MATCH — the exact shard-trust flaw the gate exists to remove.
   * B's `blind` attestation is read PER-SHARD from B's own artifact header, never from C.
-  * C's per-entry `flags` (`url_only_source_unqueried`, `degraded_search`, `web_record_absent`)
-    are the ONLY thing C contributes to the verdict; C never states the diff.
+  * Routing flags are recomputed from A/B; C's per-entry flags are advisory additions.
+    Invalid C flags fail closed, and C never states the authoritative diff.
 
 Artifact schemas the gate reads:
   A: {"shard_id":"A", "entries":[{"dedup_key","key","bibtex"}, …]}
@@ -702,7 +703,7 @@ def assemble_flags(c_entry, a_rec, b_entry):
                 flags.add(x.strip())
             else:
                 bad = True                # non-string / empty flag item is a schema violation
-    elif raw not in (None, ''):
+    else:
         bad = True                        # `flags` present but not a list is a schema violation
     if bad:
         flags.add('c_schema_invalid')
@@ -1277,6 +1278,10 @@ FLAG_SELFTEST = [
     ("recompute url_only for a url-bearing misc B could not index", {}, _MISC_URL_REC,
      {'found': False, 'sources_tried': ['arxiv', 'dblp']}, ['url_only_source_unqueried', 'web_record_absent']),
     ("C flags as a string fails closed (schema violation)", {'flags': 'url_only_source_unqueried'}, _DOI_REC,
+     {'found': True, 'sources_tried': ['arxiv']}, ['c_schema_invalid']),
+    ("C flags null fails closed (schema violation)", {'flags': None}, _DOI_REC,
+     {'found': True, 'sources_tried': ['arxiv']}, ['c_schema_invalid']),
+    ("C flags empty string fails closed (schema violation)", {'flags': ''}, _DOI_REC,
      {'found': True, 'sources_tried': ['arxiv']}, ['c_schema_invalid']),
     ("C flags with a non-string item fails closed but keeps valid flags", {'flags': ['degraded_search', 123]}, _DOI_REC,
      {'found': True, 'sources_tried': ['arxiv']}, ['c_schema_invalid', 'degraded_search']),
