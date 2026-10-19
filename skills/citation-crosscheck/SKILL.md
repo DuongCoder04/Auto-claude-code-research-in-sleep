@@ -105,7 +105,7 @@ VOLCITE = {'volcite', 'Volcite', 'pvolcite', 'Pvolcite', 'fvolcite', 'ftvolcite'
            'tvolcites', 'avolcites', 'ftvolcite', 'ftvolcites'}
 NAMES = sorted({
     # natbib / LaTeX core (capitalized variants are real natbib commands)
-    'cite', 'citep', 'citet', 'citealp', 'citealt', 'citenum', 'citeyear', 'citeyearpar',
+    'cite', 'Cite', 'citep', 'citet', 'citealp', 'citealt', 'citenum', 'citeyear', 'citeyearpar',
     'citeauthor', 'citefullauthor', 'Citep', 'Citet', 'Citealp', 'Citealt', 'Citeauthor',
     # biblatex singular + plural
     'parencite', 'Parencite', 'footcite', 'footcitetext', 'footcitetexts', 'textcite',

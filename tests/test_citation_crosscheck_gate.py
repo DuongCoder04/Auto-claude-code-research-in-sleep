@@ -9,11 +9,14 @@ drift between the two copies fails CI instead of being discovered on a live run.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MAIN_GATE = REPO_ROOT / "skills" / "citation-crosscheck" / "scripts" / "cx_verify.py"
@@ -115,3 +118,96 @@ def test_manifest_cli_covers_the_documented_workflow(tmp_path: Path) -> None:
     substituted = run_gate()
     assert substituted.returncode == 1
     assert "coverage manifest mismatch" in substituted.stderr
+
+
+@pytest.mark.parametrize("surname", ["Jr", "Sr", "Ii", "III", "IV"])
+@pytest.mark.parametrize("given", ["Naosuke", "Naosuke Middle"])
+def test_suffix_token_surnames_survive_normalization(surname: str, given: str) -> None:
+    spec = importlib.util.spec_from_file_location("citation_gate", MAIN_GATE)
+    assert spec and spec.loader
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+
+    def verdict(ours: str, web: str) -> str:
+        return gate.classify(gate._entry(*gate._both(authors=ours, web_authors=web)))[0]
+
+    # The actual surname is neither erased nor mistaken for the given name.
+    assert verdict(f"Alice Smith and {given} {surname}", f"Alice Smith and {given}") == "ESCALATE"
+    assert verdict(f"{surname}, {given}", f"{given} {surname}") == "MATCH"
+    assert verdict(f"{given} {surname}", f"{surname}, {given}") == "MATCH"
+
+
+@pytest.mark.parametrize(
+    ("mapping", "kept", "error"),
+    [
+        ([("01", "paperA"), ("02", "paperB"), ("02", "paperC")],
+         [("01", "paperA"), ("02", "paperC")], "duplicate dedup_key"),
+        ([("01", "paperA"), ("02", "paperC"), ("02", "paperC")],
+         [("01", "paperA"), ("02", "paperC")], "duplicate dedup_key"),
+        ([("01", "paperA"), ("02", "paperA"), ("03", "paperC")],
+         [("01", "paperA"), ("02", "paperA"), ("03", "paperC")], "duplicate cite key"),
+    ],
+)
+def test_manifest_rejects_duplicate_coverage_at_build_and_load(
+    tmp_path: Path, mapping: list, kept: list, error: str,
+) -> None:
+    records = {
+        key: f"@article{{{key}, title={{{key}}}, author={{Smith, Alice}}, year={{2020}}, journal={{ICML}}, doi={{10.1/example}}}}"
+        for key in ("paperA", "paperB", "paperC")
+    }
+    bib = tmp_path / "refs.bib"
+    bib.write_text("\n".join(records.values()), encoding="utf-8")
+    keymap, manifest = tmp_path / "keymap.tsv", tmp_path / "manifest.tsv"
+    build_cmd = [sys.executable, str(MAIN_GATE), "--build-manifest", "--bib", str(bib),
+                 "--keymap", str(keymap), "--out-manifest", str(manifest)]
+    keymap.write_text("".join(f"{dk}\t{key}\n" for dk, key in mapping), encoding="utf-8")
+    bad_build = subprocess.run(build_cmd, capture_output=True, text=True)
+    assert bad_build.returncode == 1
+    assert error in bad_build.stderr
+    assert not manifest.exists()
+
+    # Generate correct title hashes, then inject the same duplicate into a manifest
+    # supplied directly to the verifier. The old loader silently kept the last row.
+    keymap.write_text("01\tpaperA\n02\tpaperB\n03\tpaperC\n", encoding="utf-8")
+    clean_build = subprocess.run(build_cmd, capture_output=True, text=True)
+    assert clean_build.returncode == 0, clean_build.stderr
+    hashes = {row.split("\t")[1]: row.split("\t")[2] for row in manifest.read_text().splitlines()}
+    manifest.write_text("".join(f"{dk}\t{key}\t{hashes[key]}\n" for dk, key in mapping), encoding="utf-8")
+    shards = {
+        "a": {"entries": [{"dedup_key": dk, "key": key, "bibtex": records[key]} for dk, key in kept]},
+        "b": {"blind": True, "entries": [{"dedup_key": dk, "found": True, "bibtex": records[key],
+                                            "sources_tried": ["crossref"]} for dk, key in kept]},
+        "c": {"entries": [{"dedup_key": dk, "flags": []} for dk, key in kept]},
+    }
+    for side, value in shards.items():
+        (tmp_path / f"{side}.json").write_text(json.dumps(value), encoding="utf-8")
+    expected_keys = tmp_path / "expected.txt"
+    expected_keys.write_text("\n".join(dk for dk, _ in kept), encoding="utf-8")
+    checked = subprocess.run(
+        [sys.executable, str(MAIN_GATE), "--a", str(tmp_path / "a.json"),
+         "--b", str(tmp_path / "b.json"), "--c", str(tmp_path / "c.json"),
+         "--expect", str(len(kept)), "--expect-keys", str(expected_keys),
+         "--expect-manifest", str(manifest)], capture_output=True, text=True,
+    )
+    assert checked.returncode == 1
+    assert error in checked.stderr
+    assert "MATCH=2" not in checked.stdout
+
+
+@pytest.mark.parametrize("skill_root", [MAIN_GATE.parents[1], CODEX_GATE.parents[1]])
+def test_step_one_harvests_sentence_initial_biblatex_cite(tmp_path: Path, skill_root: Path) -> None:
+    source = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+    step_one = source.split("### Step 1", 1)[1]
+    match = re.search(r"python3 - <<'PY'\n(.*?)\nPY", step_one, re.S)
+    assert match, "Step 1's actual citation-harvest script is missing"
+    # Keep the actual harvest logic; redirect its shared /tmp outputs for this test.
+    script = match.group(1).replace("/tmp/cx_", str(tmp_path / "cx_"))
+    (tmp_path / "main.tex").write_text(
+        "\\Cite{sentence}\n\\cite{lower}\n% \\Cite{commented}\n", encoding="utf-8",
+    )
+    harvested = subprocess.run(
+        [sys.executable, "-c", script], cwd=tmp_path, capture_output=True, text=True,
+    )
+    assert harvested.returncode == 0, harvested.stderr
+    assert set((tmp_path / "cx_cited_keys.txt").read_text().splitlines()) == {"sentence", "lower"}
+    assert "CITED_KEY_COUNT=2" in harvested.stdout

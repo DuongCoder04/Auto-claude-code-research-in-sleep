@@ -228,7 +228,7 @@ def norm_authors(s):
     'Vaswani, Ashish and Shazeer, Noam' -> ['vaswani','shazeer']
     'Ashish Vaswani and Noam Shazeer'   -> ['vaswani','shazeer']
     'van der Berg, Jan' == 'Jan van der Berg' -> ['vanderberg']
-    'Smith, John Jr.'   == 'John Smith Jr.'   -> ['smith']
+    'Smith, John Jr.' compares equal to 'John Smith Jr.' via authors_equal().
 
     Order is preserved deliberately: a re-ordered author list is one of the exact
     defects this skill exists to catch, so it must NOT normalize to equal.
@@ -251,17 +251,20 @@ def norm_authors(s):
         chunk = _fold(raw_chunk).strip(' .,')
         if not chunk:
             continue
-        # Pull generational suffixes out of the WHOLE name first, so a suffix is captured
-        # whether it sits by the surname ("John Smith Jr.") or after the given name in
-        # comma form ("Smith, John Jr."). A CONFLICTING suffix is a different person.
-        suffix = ''.join(sorted(_alnum(w) for w in chunk.split()
-                                if _alnum(w) in SUFFIXES))
+        suffix = ''
         if ',' in chunk:                      # "Last, First" -> surname is before the comma
             surname_words = chunk.split(',')[0].split()
             given = chunk.split(',', 1)[1]
+            # Only comma form identifies the surname unambiguously. A suffix token
+            # inside that surname (e.g. "Ii, Naosuke") is never removed.
+            suffix = ''.join(sorted(_alnum(w) for w in given.split()
+                                    if _alnum(w) in SUFFIXES))
+            given = ' '.join(w for w in given.split() if _alnum(w) not in SUFFIXES)
         else:                                 # "First M. Last" -> surname is the tail
             words = [w for w in chunk.split() if w]
-            words = [w for w in words if _alnum(w) not in SUFFIXES] or words
+            # Keep the literal tail: "Naosuke Ii" has surname Ii, not Naosuke.
+            # authors_equal folds a possible suffix only when the other record
+            # explicitly identifies the same suffix outside its comma-form surname.
             # Walk left from the tail while the preceding word is a nobiliary particle,
             # so "jan van der berg" yields "van der berg", not "berg".
             i = len(words) - 1
@@ -269,15 +272,10 @@ def norm_authors(s):
                 i -= 1
             surname_words = words[i:]
             given = ' '.join(words[:i]) if i > 0 else ''
-        # A surname that is ENTIRELY a suffix token — a real surname like 'Ii' (井伊), 'III',
-        # or 'Jr' — must NOT be filtered to nothing: doing so dropped the whole author and let
-        # a missing coauthor compare equal (a false MATCH). Keep the token when nothing remains.
-        surname_words = [w for w in surname_words if _alnum(w) not in SUFFIXES] or surname_words
         surname = _alnum(''.join(surname_words))
         # Surname alone accepts 'John Smith' vs 'Jane Smith' and 'Plato' vs 'John
         # Plato', so carry the given name too and let authors_equal decide what is
         # cosmetic (abbreviation and dropped middles) versus a real difference.
-        given = ' '.join(w for w in given.split() if _alnum(w) not in SUFFIXES)
         # Keep the full given-name token sequence. Comparison (authors_equal) decides
         # what is cosmetic: it tolerates abbreviation and a DROPPED middle name, but a
         # PRESENT-on-both-sides middle name must agree ('John P. Smith' vs 'John Q.
@@ -355,12 +353,26 @@ def _given_eq(gx, gy):
 
 def authors_equal(a, b):
     """Compare two norm_authors() lists. Order matters; abbreviation is cosmetic."""
+    def explicit_suffix(surname, given, suffix, other_suffix):
+        # "John Smith Jr." may be suffix form only when the other record says
+        # "Smith, John Jr." (or "Smith, Jr., John"). Without that corroboration,
+        # treating its literal surname as a suffix could erase a real surname.
+        words = given.split('.') if given else []
+        if not suffix and surname in SUFFIXES and surname == other_suffix and len(words) >= 2:
+            i = len(words) - 1
+            while i > 0 and words[i - 1] in PARTICLES:
+                i -= 1
+            return ''.join(words[i:]), '.'.join(words[:i]), surname
+        return surname, given, suffix
+
     if len(a) != len(b):
         return False
     for x, y in zip(a, b):
         px, py = x.split('|'), y.split('|')
         sx, gx, sufx = px[0], px[1] if len(px) > 1 else '', px[2] if len(px) > 2 else ''
         sy, gy, sufy = py[0], py[1] if len(py) > 1 else '', py[2] if len(py) > 2 else ''
+        sx, gx, sufx = explicit_suffix(sx, gx, sufx, sufy)
+        sy, gy, sufy = explicit_suffix(sy, gy, sufy, sufx)
         if sx != sy or not _given_eq(gx, gy):
             return False
         # A conflicting generational suffix is a different person (Jr vs Sr); a suffix
@@ -916,6 +928,7 @@ def build_manifest(bib_path, keymap_path, out_path):
         print('ERROR: cannot read --keymap %s: %s' % (keymap_path, exc), file=sys.stderr)
         return 1
     lines, missing = [], []
+    seen_ordinals, seen_cite_keys = set(), set()
     for raw_line in km.splitlines():
         if not raw_line.strip():
             continue
@@ -924,6 +937,14 @@ def build_manifest(bib_path, keymap_path, out_path):
             print("ERROR: --keymap line is not '<dedup_key>\\t<cite_key>': %r" % raw_line, file=sys.stderr)
             return 1
         dk, ck = parts[0].strip(), parts[1].strip()
+        if dk in seen_ordinals:
+            print('ERROR: duplicate dedup_key in --keymap: %s' % _safe(dk), file=sys.stderr)
+            return 1
+        if ck in seen_cite_keys:
+            print('ERROR: duplicate cite key in --keymap: %s' % _safe(ck), file=sys.stderr)
+            return 1
+        seen_ordinals.add(dk)
+        seen_cite_keys.add(ck)
         raw = by_key.get(ck)
         if raw is None:
             missing.append(ck)
@@ -951,7 +972,7 @@ def load_manifest(path):
     except OSError as exc:
         print('ERROR: cannot read --expect-manifest %s: %s' % (path, exc), file=sys.stderr)
         return None
-    want = {}
+    want, seen_cite_keys = {}, set()
     for line in raw.splitlines():
         if not line.strip():
             continue
@@ -959,7 +980,15 @@ def load_manifest(path):
         if len(parts) < 3:
             print('ERROR: --expect-manifest line is not 3 tab-separated columns: %r' % line, file=sys.stderr)
             return None
-        want[parts[0].strip()] = (parts[1].strip(), parts[2].strip())
+        dk, ck, title_hash = (part.strip() for part in parts[:3])
+        if dk in want:
+            print('ERROR: duplicate dedup_key in --expect-manifest: %s' % _safe(dk), file=sys.stderr)
+            return None
+        if ck in seen_cite_keys:
+            print('ERROR: duplicate cite key in --expect-manifest: %s' % _safe(ck), file=sys.stderr)
+            return None
+        want[dk] = (ck, title_hash)
+        seen_cite_keys.add(ck)
     return want
 
 
@@ -1172,6 +1201,18 @@ SELFTEST = [
      _entry(*_both(authors='Tanaka, H and Ii, N', web_authors='H Tanaka', venue='arXiv', web_venue='ICML')), 'ESCALATE'),
     ("identical suffix-like surname still matches",
      _entry(*_both(authors='Ii, Naosuke', web_authors='Ii, Naosuke')), 'MATCH'),
+    ("no-comma surname Ii is not erased",
+     _entry(*_both(authors='Alice Smith and Naosuke Ii', web_authors='Alice Smith and Naosuke')), 'ESCALATE'),
+    ("surname Ii agrees across name formats",
+     _entry(*_both(authors='Ii, Naosuke', web_authors='Naosuke Ii')), 'MATCH'),
+    ("middle name does not make surname Ii a suffix",
+     _entry(*_both(authors='Naosuke Middle Ii', web_authors='Naosuke Middle')), 'ESCALATE'),
+    ("ambiguous no-comma suffix omission escalates",
+     _entry(*_both(authors='John Smith Jr.', web_authors='John Smith')), 'ESCALATE'),
+    ("explicit comma-form suffix omission is cosmetic",
+     _entry(*_both(authors='Smith, John Jr.', web_authors='John Smith')), 'MATCH'),
+    ("explicit Roman suffix agrees across name formats",
+     _entry(*_both(authors='Smith, III, John', web_authors='John Smith III')), 'MATCH'),
 ]
 
 
