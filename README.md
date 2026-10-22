@@ -1440,8 +1440,9 @@ Add `— reviewer: oracle-pro` to any reviewer-aware skill (`/proof-checker`, `/
 > 📖 **New to ARIS?** [`SETUP_GUIDE.md`](SETUP_GUIDE.md) ([中文](SETUP_GUIDE_CN.md)) gives a prescriptive 6-step walkthrough for macOS local + remote Linux GPU server with Claude Code + Codex MCP — the recommended path. The section below is a quick reference; deeper GPU / customization / model-combo setup lives in the linked docs.
 
 <a id="prerequisites"></a>
+<a id="101-prerequisites"></a>
 
-### 10.1 Prerequisites
+### 9.1 Prerequisites
 
 1. [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 2. (For review skills) [Codex CLI](https://github.com/openai/codex) installed and configured as MCP server:
@@ -1471,8 +1472,9 @@ Add `— reviewer: oracle-pro` to any reviewer-aware skill (`/proof-checker`, `/
    > If you only need Workflow 1 & 2 (idea discovery + auto review), LaTeX is not required.
 
 <a id="install-skills"></a>
+<a id="102-install-skills"></a>
 
-### 10.2 Install Skills
+### 9.2 Install Skills
 
 > 💡 **Recommended: project-local flat symlink install** (since 2026-04-20). Each ARIS skill is symlinked individually into `.claude/skills/<skill-name>`, so Claude Code's slash-command discovery picks them up. A manifest at `.aris/installed-skills.txt` tracks what ARIS installed — uninstall and reconcile only ever touch managed entries, never your own skills.
 >
@@ -1590,7 +1592,9 @@ All plugin features are **optional** — if not installed, ARIS falls back to Cl
 
 </details>
 
-### 10.3 Update Skills
+<a id="103-update-skills"></a>
+
+### 9.3 Update Skills
 
 ```bash
 cd Auto-claude-code-research-in-sleep
@@ -1609,7 +1613,9 @@ bash tools/smart_update.sh --apply  # apply: updates safe ones; NEW upstream ski
 
 > 💡 **Smart update** compares your local skills with upstream, detects personal customizations (server paths, API keys, etc.), and only updates skills that are safe to replace. Skills with your personal info are flagged for manual review.
 
-### 10.4 Usage
+<a id="104-usage"></a>
+
+### 9.4 Usage
 
 ```
 # Workflow 1: Idea Discovery
@@ -1640,7 +1646,9 @@ bash tools/smart_update.sh --apply  # apply: updates safe ones; NEW upstream ski
 > /monitor-experiment server5
 ```
 
-### 10.5 🌙 Auto-Allow for Overnight Runs (Optional)
+<a id="105--auto-allow-for-overnight-runs-optional"></a>
+
+### 9.5 🌙 Auto-Allow for Overnight Runs (Optional)
 
 <details>
 <summary>Skip permission prompts on overnight runs — add a snippet to <code>.claude/settings.local.json</code></summary>
