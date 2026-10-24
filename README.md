@@ -238,12 +238,13 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 - **2026-10-19** — 🔬 **Bounded parallel work for research workflows** — idea generation, literature extraction, and proof checking now share [fan-out rules](skills/shared-references/fan-out-pattern.md): capped worker batches, coverage records, and sequential fallback when parallel execution is unavailable. Workers collect candidates and evidence; designated reviewers retain final judgments. ([#372](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/372); thanks [@Dennis-Huangm](https://github.com/Dennis-Huangm))
 - **2026-10-07** — 🧮 **From a mathematical statement to a checked Lean proof** — new [`/lean-formalize`](skills/lean-formalize/SKILL.md) for Claude Code and [Codex](skills/skills-codex/lean-formalize/SKILL.md). Develop proof routes, connect intermediate lemmas to the original theorem, and deliver reproducible Lean sources with statement and axiom checks. Cross-family reviews target the statement, key arguments, and final assembly. Integrated into five proof/research skills; use it when requested or a concrete proof obligation benefits from formal verification. ([#461](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/461))
 - **2026-10-05** — 🔌 **New [Grok](mcp-servers/grok-exec/README.md) and [Gemini / Antigravity](mcp-servers/antigravity-exec/README.md) MCP bridges** — use your existing CLI login to read files and resume conversations from Claude Code or Codex. ([#454](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/454))
+
+<details>
+<summary>Earlier updates (2026-03-12 — 2026-09-28, 98 entries)</summary>
+
 - **2026-09-28** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 📚 **Real papers stop being reported as hallucinated citations** ([#445](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/445), [#447](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/447), [#450](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/450); thanks [@ilya-pershin](https://github.com/ilya-pershin) and [@AfonsoZhang](https://github.com/AfonsoZhang)). arXiv sometimes refuses Python's HTTP client with a 406 for minutes while `curl` gets through; `verify_papers.py` read that refusal as "paper not found" and one user saw a 47% hallucination rate on 38 real papers. A 406 now goes through `curl`, and a refusal (406 / 401 / 403) is `verify_pending`, never `unverified`. Set `SEMANTIC_SCHOLAR_API_KEY` and title checks use it. Seen a suspicious hallucination rate recently? Re-run with `--no-cache` once. Also in this round: five skills can now actually invoke the sub-skills their text tells them to ([#440](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/440), [@Jeremy-xuan](https://github.com/Jeremy-xuan)); concurrent watchdog registrations no longer overwrite each other ([#443](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/443), [@hiro-nikaitou](https://github.com/hiro-nikaitou)); `xhigh` is described as the regular reviewer tier it is ([#442](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/442), [@dreamworld2023](https://github.com/dreamworld2023)).
 - **2026-09-16** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧩 **ARIS is a Claude Code plugin now** ([#437](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/437), thanks [@white-drizzle](https://github.com/white-drizzle)). `claude plugin marketplace add wanshuiyin/Auto-claude-code-research-in-sleep` → `claude plugin install aris@aris` → `/aris:setup` once → restart. Setup registers the Codex reviewer bridge that ships inside the plugin, so the reviewer works on codex-cli 0.154+ out of the box. Plugin skills are typed with the prefix (`/aris:idea-discovery`); they call each other by short name internally. Codex CLI reads the same repo as a plugin too (`codex plugin marketplace add …` → `codex plugin add aris@aris`) and gets the Codex-native mirror. Cursor, Trae and DeepSeek Harness keep their own routes.
 - **2026-09-10** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 🔌 **codex-cli 0.154 removed `codex mcp-server` — re-register the `codex` MCP server.** Every ARIS reviewer call went through that entry point; on 0.154+ it now opens the interactive TUI and the MCP handshake fails. ARIS ships its own stand-in, `mcp-servers/codex-exec/server.py`, same tool names and result shape, driving `codex exec` underneath — skills unchanged. Run once: `git pull` in your ARIS clone (older clones do not have the file), then `claude mcp remove codex -s user && claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"` (absolute path of your clone), then restart Claude Code. Step-by-step for new and existing installs in [Quick Start](#quick-start). Works on 0.153 too, so do it before you update. OpenAI's own replacement, the Claude Code plugin, has no `ultra` effort and no per-thread resume, which the deep-audit skills need. Cursor / Trae / Antigravity / Copilot CLI configs: same key, `python3` + that path — see the adaptation docs.
-<details>
-<summary>Earlier updates (2026-03-12 — 2026-09-07, 95 entries)</summary>
-
 - **2026-09-07** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧠 **Default reviewer is now `gpt-6-astra`.** Every reviewer call that pinned `gpt-5.6-sol` now pins `gpt-6-astra`; the two effort tiers (ultra for the seven deep audits, xhigh everywhere else) are unchanged, and so is the executor — whatever agent you run ARIS in. No access to the model yet? The capability fallback tries `gpt-5.6-sol`, then `gpt-5.5`, both at xhigh — nothing to configure.
 - **2026-09-06** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 🧹 **The installer stops dropping Copilot profiles into every project** ([#431](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/431), thanks [@oblivion-1521](https://github.com/oblivion-1521)). Since 2026-08 every run symlinked two Copilot reviewer profiles into your `.github/agents/` whether or not anything used them — dead files for Claude Code and Codex users, broken links if you committed them. Now they are deployed only while `auto-review-loop` is installed; `--no-agent-profiles` switches them off for good (undo with `--agent-profiles`). Your next re-run removes the links the installer created earlier; files you wrote yourself are never touched.
 - **2026-09-03** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 📣 **Papers are launches, not progress reports** (rules adopted from [anti-defensive-writing-Skill](https://github.com/Adkid-Zephyr/anti-defensive-writing-Skill) by [@Adkid-Zephyr](https://github.com/Adkid-Zephyr) — 🌟 it). The writing contract gains four rules: organize the narrative around the strongest genuine advantage; pick the contest the paper wins; unfavorable numbers stay in the tables, explained as a tradeoff where the evidence supports that and stated neutrally where it does not — never narrated as a defeat; every experiment carries an argumentative duty or leaves the main line; abstract and introduction open with problem → gap → idea → strongest result, and the conclusion never ends on new self-negation. `/auto-paper-improvement-loop` flags the same defects. Indexed under [Awesome Community Skills](#awesome-community-skills).
@@ -1445,8 +1446,9 @@ Add `— reviewer: oracle-pro` to any reviewer-aware skill (`/proof-checker`, `/
 > 📖 **New to ARIS?** [`SETUP_GUIDE.md`](SETUP_GUIDE.md) ([中文](SETUP_GUIDE_CN.md)) gives a prescriptive 6-step walkthrough for macOS local + remote Linux GPU server with Claude Code + Codex MCP — the recommended path. The section below is a quick reference; deeper GPU / customization / model-combo setup lives in the linked docs.
 
 <a id="prerequisites"></a>
+<a id="101-prerequisites"></a>
 
-### 10.1 Prerequisites
+### 9.1 Prerequisites
 
 1. [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 2. (For review skills) [Codex CLI](https://github.com/openai/codex) installed and configured as MCP server:
@@ -1476,8 +1478,9 @@ Add `— reviewer: oracle-pro` to any reviewer-aware skill (`/proof-checker`, `/
    > If you only need Workflow 1 & 2 (idea discovery + auto review), LaTeX is not required.
 
 <a id="install-skills"></a>
+<a id="102-install-skills"></a>
 
-### 10.2 Install Skills
+### 9.2 Install Skills
 
 > 💡 **Recommended: project-local flat symlink install** (since 2026-04-20). Each ARIS skill is symlinked individually into `.claude/skills/<skill-name>`, so Claude Code's slash-command discovery picks them up. A manifest at `.aris/installed-skills.txt` tracks what ARIS installed — uninstall and reconcile only ever touch managed entries, never your own skills.
 >
@@ -1595,7 +1598,9 @@ All plugin features are **optional** — if not installed, ARIS falls back to Cl
 
 </details>
 
-### 10.3 Update Skills
+<a id="103-update-skills"></a>
+
+### 9.3 Update Skills
 
 ```bash
 cd Auto-claude-code-research-in-sleep
@@ -1614,7 +1619,9 @@ bash tools/smart_update.sh --apply  # apply: updates safe ones; NEW upstream ski
 
 > 💡 **Smart update** compares your local skills with upstream, detects personal customizations (server paths, API keys, etc.), and only updates skills that are safe to replace. Skills with your personal info are flagged for manual review.
 
-### 10.4 Usage
+<a id="104-usage"></a>
+
+### 9.4 Usage
 
 ```
 # Workflow 1: Idea Discovery
@@ -1645,7 +1652,9 @@ bash tools/smart_update.sh --apply  # apply: updates safe ones; NEW upstream ski
 > /monitor-experiment server5
 ```
 
-### 10.5 🌙 Auto-Allow for Overnight Runs (Optional)
+<a id="105--auto-allow-for-overnight-runs-optional"></a>
+
+### 9.5 🌙 Auto-Allow for Overnight Runs (Optional)
 
 <details>
 <summary>Skip permission prompts on overnight runs — add a snippet to <code>.claude/settings.local.json</code></summary>
