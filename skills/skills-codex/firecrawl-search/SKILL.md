@@ -28,7 +28,7 @@ Use Firecrawl when you need sources outside academic databases, or when you want
 
 - **FIRECRAWL_FETCHER** — canonical name `firecrawl_search.py`, resolved per
   [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2
-  (Codex-side chain: `$ARIS_REPO/tools/` → `tools/` → `~/.codex/skills/firecrawl-search/`).
+  (Codex-side chain: `$ARIS_REPO/tools/` (environment, project manifest, or `~/.aris/repo`) → `.aris/tools/` → `tools/` → `~/.codex/skills/firecrawl-search/`).
   Policy D1 — standalone `/firecrawl-search` has no documented fallback,
   so unresolved helper terminates with an explicit error.
 - **MAX_RESULTS = 5** — Default number of search results. Each result is scraped, so keep this small.
@@ -89,12 +89,16 @@ Parse `$ARGUMENTS` for:
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 FIRECRAWL_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/firecrawl_search.py" ] && FIRECRAWL_FETCHER="$ARIS_REPO/tools/firecrawl_search.py"
+[ -z "$FIRECRAWL_FETCHER" ] && [ -f .aris/tools/firecrawl_search.py ] && FIRECRAWL_FETCHER=".aris/tools/firecrawl_search.py"
 [ -z "$FIRECRAWL_FETCHER" ] && [ -f tools/firecrawl_search.py ] && FIRECRAWL_FETCHER="tools/firecrawl_search.py"
 [ -z "$FIRECRAWL_FETCHER" ] && [ -f ~/.codex/skills/firecrawl-search/firecrawl_search.py ] && FIRECRAWL_FETCHER="$HOME/.codex/skills/firecrawl-search/firecrawl_search.py"
 [ -z "$FIRECRAWL_FETCHER" ] && {
-  echo "ERROR: firecrawl_search.py not resolved at \$ARIS_REPO/tools/, tools/, or ~/.codex/skills/firecrawl-search/." >&2
+  echo "ERROR: firecrawl_search.py not resolved at \$ARIS_REPO/tools/ (including ~/.aris/repo), .aris/tools/, tools/, or ~/.codex/skills/firecrawl-search/." >&2
   echo "       Fix: rerun tools/install_aris_codex.sh, export ARIS_REPO, or copy the helper to ~/.codex/skills/firecrawl-search/." >&2
   exit 1
 }
@@ -171,17 +175,28 @@ paper** (`arxiv.org/abs/<id>`, `arxiv.org/pdf/<id>` or
 General web results (blog posts, docs, project pages) are **not**
 ingested — the wiki is for papers only.
 
-For each arXiv result, ingest it by arXiv ID:
+When the predicates hold, resolve the wiki helper with the same repository
+and project-tool fallbacks as Step 2 (warn and skip ingestion if missing):
 
+```bash
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
+WIKI_SCRIPT=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f .aris/tools/research_wiki.py ] && WIKI_SCRIPT=".aris/tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
+[ -n "$WIKI_SCRIPT" ] || echo "WARN: research_wiki.py not found; firecrawl-search results delivered, wiki ingest skipped." >&2
 ```
-if [ -d research-wiki/ ] and a result URL matches arxiv.org/(abs|pdf|html)/<id>:
-    WIKI_SCRIPT=""
-    [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
-    [ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
-    [ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
-    [ -n "$WIKI_SCRIPT" ] || echo "WARN: research_wiki.py not found; firecrawl-search results delivered, wiki ingest skipped." >&2
-    for each arXiv result:
-        [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ --arxiv-id "<id>"
+
+For each validated arXiv ID, run (only when `WIKI_SCRIPT` is nonempty):
+
+```bash
+[ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ --arxiv-id '<id>'
 ```
 
 The helper handles slug / dedup / page / index / log — **do not

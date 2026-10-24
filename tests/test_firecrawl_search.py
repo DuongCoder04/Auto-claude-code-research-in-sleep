@@ -599,3 +599,51 @@ def test_step4_ends_with_evidence_boundary_footer_linked_to_citation_discipline(
         link = "../shared-references/citation-discipline.md"
         assert f"]({link})" in step4
         assert (path.parent / link).resolve().is_file()
+
+
+@pytest.mark.parametrize("skill", SKILLS, ids=("claude", "codex"))
+@pytest.mark.parametrize("step,variable,helper", [
+    ("### Step 2: Locate Script", "FIRECRAWL_FETCHER", "firecrawl_search.py"),
+    ("### Step 6: Update Research Wiki", "WIKI_SCRIPT", "research_wiki.py"),
+])
+@pytest.mark.parametrize("layout", ("global-pointer", "project-tools", "explicit-repo", "manifest"))
+def test_skill_resolves_helpers_in_downstream_project(tmp_path, skill, step, variable, helper, layout):
+    """Execute the documented resolver; home references use fixture paths only."""
+    import os
+    import subprocess
+
+    project = tmp_path / "project"
+    project.mkdir()
+    fixture_home = tmp_path / "fixture-home"
+    (fixture_home / ".aris").mkdir(parents=True)
+    repo = tmp_path / "repo"
+    (repo / "tools").mkdir(parents=True)
+    (repo / "tools" / helper).write_text("print('resolved-helper')\n")
+    # A competing global pointer verifies explicit repo/manifest precedence.
+    pointer = repo
+    if layout in ("explicit-repo", "manifest"):
+        pointer = tmp_path / "other-repo"
+        (pointer / "tools").mkdir(parents=True)
+        (pointer / "tools" / helper).write_text("print('wrong-global-helper')\n")
+    if layout != "project-tools":
+        (fixture_home / ".aris/repo").write_text(str(pointer) + "\n")
+    env = dict(os.environ)
+    env.pop("ARIS_REPO", None)
+    if layout == "explicit-repo":
+        env["ARIS_REPO"] = str(repo)
+    if layout in ("project-tools", "manifest"):
+        (project / ".aris").mkdir()
+        if layout == "project-tools":
+            (project / ".aris/tools").symlink_to(repo / "tools", target_is_directory=True)
+        else:
+            manifest = "installed-skills-codex.txt" if "skills-codex" in skill.parts else "installed-skills.txt"
+            (project / ".aris" / manifest).write_text("repo_root\t" + str(repo) + "\n")
+    section = skill.read_text().split(step, 1)[1]
+    block = section.split("```bash\n", 1)[1].split("```", 1)[0]
+    block = block.replace("$HOME", str(fixture_home)).replace("~/.codex", str(fixture_home / ".codex"))
+    proc = subprocess.run(
+        ["bash", "-eu", "-c", block + f'\npython3 "${variable}"'],
+        cwd=project, env=env, text=True, capture_output=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == "resolved-helper\n"
