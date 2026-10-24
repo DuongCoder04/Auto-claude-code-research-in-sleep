@@ -26,7 +26,9 @@ Use Keenable when you need results beyond academic databases (blogs, docs, proje
 
 - **KEENABLE_FETCHER**: canonical name `keenable_search.py`, resolved per
   [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2
-  (Codex-side chain: `$ARIS_REPO/tools/` → `tools/` → `~/.codex/skills/keenable-search/`).
+  (Codex-side chain: explicit/manifest `$ARIS_REPO/tools/`, with
+  `~/.aris/repo` as the global-copy pointer → `.aris/tools/` → `tools/` →
+  `~/.codex/skills/keenable-search/`).
   Policy D1: standalone `/keenable-search` has no documented fallback,
   so an unresolved helper terminates with an explicit error.
 - **MAX_RESULTS = 10**: Default number of results to return (1-50).
@@ -71,12 +73,16 @@ Parse `$ARGUMENTS` for:
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 KEENABLE_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/keenable_search.py" ] && KEENABLE_FETCHER="$ARIS_REPO/tools/keenable_search.py"
+[ -z "$KEENABLE_FETCHER" ] && [ -f .aris/tools/keenable_search.py ] && KEENABLE_FETCHER=".aris/tools/keenable_search.py"
 [ -z "$KEENABLE_FETCHER" ] && [ -f tools/keenable_search.py ] && KEENABLE_FETCHER="tools/keenable_search.py"
 [ -z "$KEENABLE_FETCHER" ] && [ -f ~/.codex/skills/keenable-search/keenable_search.py ] && KEENABLE_FETCHER="$HOME/.codex/skills/keenable-search/keenable_search.py"
 [ -z "$KEENABLE_FETCHER" ] && {
-  echo "ERROR: keenable_search.py not resolved at \$ARIS_REPO/tools/, tools/, or ~/.codex/skills/keenable-search/." >&2
+  echo "ERROR: keenable_search.py not resolved via \$ARIS_REPO or ~/.aris/repo, .aris/tools/, tools/, or ~/.codex/skills/keenable-search/." >&2
   echo "       Fix: rerun tools/install_aris_codex.sh, export ARIS_REPO, or copy the helper to ~/.codex/skills/keenable-search/." >&2
   exit 1
 }

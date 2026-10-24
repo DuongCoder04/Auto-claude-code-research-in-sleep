@@ -1,6 +1,9 @@
 import importlib.util
 import io
 import json
+import os
+import re
+import subprocess
 import urllib.error
 from pathlib import Path
 
@@ -9,6 +12,47 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "tools" / "keenable_search.py"
+
+
+@pytest.mark.parametrize("layout", ["global_pointer", "project_link", "explicit", "manifest"])
+def test_codex_skill_resolves_helper_in_installed_layouts(tmp_path, layout):
+    """Execute the documented shell resolver without touching the real home."""
+    skill = (ROOT / "skills/skills-codex/keenable-search/SKILL.md").read_text()
+    step = skill.split("### Step 2: Locate Script", 1)[1]
+    block = re.search(r"```bash\n(.*?)```", step, re.S).group(1)
+    fixture_home = tmp_path / "fixture home"
+    project = tmp_path / "project"
+    project.mkdir()
+    (fixture_home / ".aris").mkdir(parents=True)
+    repositories = {}
+    for name in ("pointer", "explicit", "manifest", "linked"):
+        repo = tmp_path / name
+        (repo / "tools").mkdir(parents=True)
+        (repo / "tools/keenable_search.py").write_text(f"print({name!r})\n")
+        repositories[name] = repo
+    env = dict(os.environ)
+    env.pop("ARIS_REPO", None)
+    (project / ".aris").mkdir()
+    if layout != "project_link":
+        (fixture_home / ".aris/repo").write_text(str(repositories["pointer"]) + "\n")
+    if layout in ("explicit", "manifest"):
+        (project / ".aris/installed-skills-codex.txt").write_text(
+            f"repo_root\t{repositories['manifest']}\n"
+        )
+    if layout in ("explicit", "project_link"):
+        (project / ".aris/tools").symlink_to(repositories["linked"] / "tools")
+    if layout == "explicit":
+        env["ARIS_REPO"] = str(repositories["explicit"])
+    # Substitute home references in the snippet; preserve HOME and CODEX_HOME.
+    block = block.replace("$HOME", str(fixture_home))
+    block = block.replace("~/.codex", f'"{fixture_home}/.codex"')
+    result = subprocess.run(
+        ["bash", "-eu", "-c", block + '\npython3 "$KEENABLE_FETCHER"'],
+        cwd=project, env=env, capture_output=True, text=True,
+    )
+    expected = {"global_pointer": "pointer", "project_link": "linked"}.get(layout, layout)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == expected
 
 
 def load_module():
